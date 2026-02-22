@@ -3,7 +3,7 @@ name: flip_calendar
 description: A customizable calendar widget with page-turn animations
   and swipe gesture   navigation.
 
-version: 0.1.0
+version: 0.1.1
 
 homepage: https://github.com/resengi/flip_calendar
 repository: https://github.com/resengi/flip_calendar
