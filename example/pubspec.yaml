@@ -1,0 +1,22 @@
+name: flip_calendar_example
+description: Demonstrates the flip_calendar package with an simple UI.
+publish_to: "none"
+
+environment:
+  sdk: ^3.10.1
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  page_turn_animation: ^0.1.4
+  flip_calendar:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
