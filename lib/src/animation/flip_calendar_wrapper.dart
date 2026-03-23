@@ -393,6 +393,7 @@ class FlipCalendarWrapperState extends State<FlipCalendarWrapper>
 
   void _onDragComplete(bool shouldComplete) {
     _dragActive = false;
+    if (mounted) setState(() {});
 
     if (!_isGestureControlled) return;
 
@@ -438,6 +439,7 @@ class FlipCalendarWrapperState extends State<FlipCalendarWrapper>
   void _cleanupGesture() {
     if (!mounted) return;
     setState(() {
+      _dragActive = false;
       _isGestureControlled = false;
       _phase = _Phase.idle;
       _oldChild = null;
@@ -508,7 +510,7 @@ class FlipCalendarWrapperState extends State<FlipCalendarWrapper>
     if (widget.animationsEnabled && widget.gesturesEnabled) {
       return CalendarGestureHandler(
         boundEdge: widget.boundEdge,
-        isAnimating: _phase != _Phase.idle && !_isGestureControlled,
+        isAnimating: _phase != _Phase.idle && !_dragActive,
         maxProgressAllowed: _maxProgressAllowed,
         style: widget.style,
         onDragBegin: _onDragBegin,
