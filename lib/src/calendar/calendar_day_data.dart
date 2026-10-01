@@ -1,3 +1,6 @@
+/// @docImport 'flip_calendar.dart';
+library;
+
 /// Data passed to [FlipCalendar.dayBuilder] for each day cell.
 class CalendarDayData {
   const CalendarDayData({

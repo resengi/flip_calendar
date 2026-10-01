@@ -8,11 +8,13 @@
 /// import 'package:flip_calendar/flip_calendar.dart';
 /// import 'package:page_turn_animation/page_turn_animation.dart';
 /// ```
+///
+/// @docImport 'package:page_turn_animation/page_turn_animation.dart';
 library;
 
 // Animation
 export 'src/animation/multi_month_animation_mode.dart';
-export 'src/calendar/calendar_controller.dart';
+export 'src/calendar/calendar_controller.dart' hide ControlledCalendar;
 export 'src/calendar/calendar_day_data.dart';
 // Core
 export 'src/calendar/flip_calendar.dart';

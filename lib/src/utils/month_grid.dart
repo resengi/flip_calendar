@@ -1,3 +1,5 @@
+import 'date_utils.dart';
+
 /// Represents the grid layout for a month in the calendar.
 ///
 /// Computes the starting date and number of rows needed to display a complete
@@ -6,18 +8,22 @@ class MonthGrid {
   /// Creates a MonthGrid for the given month.
   ///
   /// [month] can be any date within the target month.
-  /// [firstDayOfWeek] controls which day starts each row
-  /// (use [DateTime.monday] through [DateTime.sunday]).
-  factory MonthGrid.forMonth(
-    DateTime month, {
-    int firstDayOfWeek = DateTime.sunday,
-  }) {
-    final firstOfMonth = DateTime(month.year, month.month, 1);
-    final lastOfMonth = DateTime(month.year, month.month + 1, 0);
+  /// [firstDayOfWeek] controls which day starts each row, from
+  /// [DateTime.monday] (1) to [DateTime.sunday] (7); any other value throws a
+  /// [RangeError].
+  factory MonthGrid.forMonth(DateTime month, {required int firstDayOfWeek}) {
+    RangeError.checkValueInInterval(
+      firstDayOfWeek,
+      DateTime.monday,
+      DateTime.sunday,
+      'firstDayOfWeek',
+    );
+    final firstOfMonth = normalizeMonth(month);
+    final lastOfMonth = lastDayOfMonth(month);
 
-    final offset = _calculateOffset(firstOfMonth.weekday, firstDayOfWeek);
-    final totalCells = offset + lastOfMonth.day;
-    final rows = (totalCells / 7).ceil();
+    final offset = weekdayOffset(firstOfMonth.weekday, firstDayOfWeek);
+    final cellsToLastDay = offset + lastOfMonth.day;
+    final rows = (cellsToLastDay / 7).ceil();
 
     final startDate = DateTime(
       firstOfMonth.year,
@@ -28,8 +34,11 @@ class MonthGrid {
     return MonthGrid(start: startDate, rows: rows);
   }
 
-  /// Creates a MonthGrid with the specified start date and row count.
-  const MonthGrid({required this.start, required this.rows});
+  /// Creates a grid whose first cell is [start], with [rows] weeks.
+  ///
+  /// Throws a [RangeError] if [rows] is outside 4 to 6.
+  MonthGrid({required this.start, required int rows})
+    : rows = RangeError.checkValueInInterval(rows, 4, 6, 'rows');
 
   /// The first date displayed in the grid (may be from the previous month).
   final DateTime start;
@@ -37,21 +46,12 @@ class MonthGrid {
   /// The number of rows (weeks) in this month's grid (4, 5, or 6).
   final int rows;
 
-  /// Calculates the column offset for a given weekday relative to
-  /// [firstDayOfWeek].
-  static int _calculateOffset(int weekday, int firstDayOfWeek) {
-    // DateTime.weekday: Monday=1 .. Sunday=7
-    final firstDayValue = firstDayOfWeek == DateTime.sunday
-        ? 7
-        : firstDayOfWeek;
-
-    int offset = weekday - firstDayValue;
-    if (offset < 0) offset += 7;
-    return offset;
-  }
-
-  /// Returns the date at a specific grid position.
+  /// The date in [row], from 0 to [rows] − 1, and [column], from 0 to 6.
+  ///
+  /// Throws a [RangeError] for a row or column outside the grid.
   DateTime dateAt(int row, int column) {
+    RangeError.checkValueInInterval(row, 0, rows - 1, 'row');
+    RangeError.checkValueInInterval(column, 0, 6, 'column');
     final dayOffset = row * 7 + column;
     return DateTime(start.year, start.month, start.day + dayOffset);
   }

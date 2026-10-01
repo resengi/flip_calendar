@@ -1,10 +1,18 @@
+/// @docImport '../calendar/flip_calendar.dart';
+library;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:page_turn_animation/page_turn_animation.dart';
 
 /// Style configuration for [FlipCalendar].
 ///
-/// All properties have sensible defaults. Use [copyWith] to customize
-/// specific properties while keeping the rest at their default values.
+/// Every field has a default. [copyWith] returns a copy with the given
+/// fields replaced and every other field kept as it is in this style.
+///
+/// Each field whose doc states a rule is checked when a calendar builds with
+/// this style: a value that breaks its rule makes the build throw an
+/// [ArgumentError] that names the field.
 class CalendarStyle {
   // -- Factories --
 
@@ -66,30 +74,32 @@ class CalendarStyle {
 
   // -- Background --
 
-  /// Background color for the entire calendar widget.
-  /// Ensures captured images for page-turn animations are opaque.
+  /// Background color of each page, painted behind the weekday header and the
+  /// grid, inside [borderRadius]'s clip.
   final Color calendarBackground;
 
   // -- Padding --
 
   /// Padding inside the calendar background, around the grid content.
   /// Included in animation image captures so the page-turn effect
-  /// shows the padded area as part of the "page".
+  /// shows the padded area as part of the "page". Every side must be finite
+  /// and not negative.
   final EdgeInsets padding;
 
   // -- Border Radius --
 
   /// Border radius for the calendar's outer edges.
   /// Applied as a clip so content (including captured animation images)
-  /// respects the rounding.
+  /// respects the rounding. Every radius must be finite and not negative.
   final BorderRadius borderRadius;
 
   // -- Grid --
 
-  /// Color of grid lines between calendar cells.
+  /// Color of the grid lines and the weekday header's lines.
   final Color gridLineColor;
 
-  /// Width of grid lines.
+  /// Width of the grid lines and the weekday header's lines; 0 draws no
+  /// line. Must be finite and not negative.
   final double gridLineWidth;
 
   // -- Weekday Header --
@@ -100,7 +110,7 @@ class CalendarStyle {
   /// Text color for weekday names (used in default text style).
   final Color weekdayHeaderTextColor;
 
-  /// Height of the weekday header row.
+  /// Height of the weekday header row. Must be finite and not negative.
   final double weekdayHeaderHeight;
 
   /// Custom text style for weekday names. If null, uses a default style.
@@ -112,13 +122,16 @@ class CalendarStyle {
 
   // -- Day Cells --
 
-  /// Text color for day numbers (available to day builder).
+  /// Text color for day numbers. The calendar does not draw with it; a day
+  /// builder can read it from this style.
   final Color dayTextColor;
 
-  /// Text color for disabled days (available to day builder).
+  /// Text color for disabled days. The calendar does not draw with it; a day
+  /// builder can read it from this style.
   final Color disabledDayTextColor;
 
-  /// Font size for day numbers (available to day builder).
+  /// Font size for day numbers. The calendar does not draw with it; a day
+  /// builder can read it from this style. Must be finite and not negative.
   final double dayTextSize;
 
   // -- Today Indicator --
@@ -126,18 +139,22 @@ class CalendarStyle {
   /// Border color for today's cell.
   final Color todayBorderColor;
 
-  /// Border width for today's cell.
+  /// Border width for today's cell; 0 draws no border. Must be finite and not
+  /// negative.
   final double todayBorderWidth;
 
-  /// Border radius for today's cell.
+  /// Border radius for today's cell. Every radius must be finite and not
+  /// negative.
   final BorderRadius todayBorderRadius;
 
-  /// Margin around today's cell content.
+  /// Margin around today's cell content. Every side must be finite and not
+  /// negative.
   final EdgeInsets todayMargin;
 
   // -- Selection --
 
-  /// Background color for the selected day's cell.
+  /// Background color for the selected day's cell. A selected day that is
+  /// disabled gets [disabledDateBackground] instead.
   final Color selectedDayBackground;
 
   // -- Disabled Dates --
@@ -147,10 +164,15 @@ class CalendarStyle {
 
   // -- Animation --
 
-  /// Duration of the page-turn animation.
+  /// Duration of the page-turn animation. A navigation that turns several
+  /// pages divides it equally among them, rounded down to the microsecond.
+  /// Must not be negative.
   final Duration animationDuration;
 
-  /// Easing curve for the page-turn animation.
+  /// Easing curve for the part of a page turn that runs by itself: each turn
+  /// of a navigation, and a swipe's turn after release, from where the
+  /// release leaves the page. While a swipe is dragged, the page follows the
+  /// finger linearly.
   final Curve animationCurve;
 
   /// Style for the page-turn effect (from `page_turn_animation` package).
@@ -158,16 +180,24 @@ class CalendarStyle {
 
   // -- Gestures --
 
-  /// Min distance (fraction of widget dimension) for a flick gesture.
+  /// With [flickMaxDuration], sets the flick speed: this fraction of the
+  /// calendar's size along the swipe axis per [flickMaxDuration]. A release
+  /// faster than that speed, that has also moved more than Flutter's touch
+  /// slop just before it, is a flick: in the swipe's direction it completes
+  /// the swipe whatever its progress, and against it it does not. Must be
+  /// finite and greater than 0.
   final double flickDistanceThreshold;
 
-  /// Max duration for a gesture to qualify as a flick.
+  /// With [flickDistanceThreshold], sets the flick speed. Must be greater
+  /// than zero.
   final Duration flickMaxDuration;
 
-  /// Fraction of widget dimension that equals 100% drag progress.
+  /// The fraction of the calendar's size along the swipe axis that a drag
+  /// covers to reach progress 1. Must be finite and greater than 0.
   final double dragBoxSizePercentage;
 
-  /// Min drag progress (0.0–1.0) required to complete a transition.
+  /// The progress at or above which a released drag that is not a flick
+  /// completes the swipe. Must be greater than 0 and at most 1.
   final double dragProgressThreshold;
 
   // -- Defaults --
@@ -264,7 +294,7 @@ class CalendarStyle {
         other.weekdayHeaderTextColor == weekdayHeaderTextColor &&
         other.weekdayHeaderHeight == weekdayHeaderHeight &&
         other.weekdayTextStyle == weekdayTextStyle &&
-        _listEquals(other.weekdayNames, weekdayNames) &&
+        listEquals(other.weekdayNames, weekdayNames) &&
         other.dayTextColor == dayTextColor &&
         other.disabledDayTextColor == disabledDayTextColor &&
         other.dayTextSize == dayTextSize &&
@@ -312,13 +342,4 @@ class CalendarStyle {
     dragBoxSizePercentage,
     dragProgressThreshold,
   ]);
-
-  static bool _listEquals<T>(List<T>? a, List<T>? b) {
-    if (a == null) return b == null;
-    if (b == null || a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
 }
