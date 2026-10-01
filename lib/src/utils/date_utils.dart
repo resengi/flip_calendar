@@ -24,7 +24,7 @@ DateTime normalizeMonth(DateTime date) {
 
 /// The last day of [date]'s month, as a local date.
 DateTime lastDayOfMonth(DateTime date) {
-  return DateTime(date.year, date.month + 1, 0);
+  return DateTime(date.year, date.month, daysInMonth(date.year, date.month));
 }
 
 /// Checks if two dates are the same day.
@@ -72,4 +72,50 @@ bool isDateSelectable(DateTime date, {DateTime? minDate, DateTime? maxDate}) {
 /// `MonthGrid.forMonth` and `FlipCalendar` have checked.
 int weekdayOffset(int weekday, int firstDayOfWeek) {
   return (weekday - firstDayOfWeek) % 7;
+}
+
+/// The index of the first complete month whose overflow cells are inside
+/// DateTime's range, which starts on -271821-04-20.
+const firstCalendarMonthIndex = -271821 * 12 + DateTime.may - 1;
+
+/// The index of the last complete month whose overflow cells are inside
+/// DateTime's range, which ends on 275760-09-13.
+const lastCalendarMonthIndex = 275760 * 12 + DateTime.august - 1;
+
+/// [date]'s month index. Days and times are ignored.
+int calendarMonthIndex(DateTime date) => date.year * 12 + date.month - 1;
+
+/// Whether [index] represents a complete month supported for every weekday
+/// layout, including the days that fill its first and last weeks.
+bool isSupportedCalendarMonthIndex(int index) {
+  return index >= firstCalendarMonthIndex && index <= lastCalendarMonthIndex;
+}
+
+/// Normalizes [month] into 1 to 12, carrying whole years into [year].
+({int year, int month}) normalizeYearMonth(int year, int month) {
+  final index = month - 1;
+  final monthIndex = index % 12;
+  return (year: year + (index - monthIndex) ~/ 12, month: monthIndex + 1);
+}
+
+/// The first day of [index]'s month, as a local date.
+DateTime calendarMonthFromIndex(int index) {
+  final (:year, :month) = normalizeYearMonth(0, index + 1);
+  return DateTime(year, month);
+}
+
+/// The Gregorian day count of [month], from 1 to 12, in [year].
+int daysInMonth(int year, int month) {
+  RangeError.checkValueInInterval(month, 1, 12, 'month');
+  if (month == DateTime.february) {
+    final leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    return leap ? 29 : 28;
+  }
+  return switch (month) {
+    DateTime.april ||
+    DateTime.june ||
+    DateTime.september ||
+    DateTime.november => 30,
+    _ => 31,
+  };
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
@@ -11,10 +12,12 @@ import '../utils/date_utils.dart';
 /// calendars are on, today, the allowed range, the animation settings and
 /// whether a navigation is in progress.
 ///
-/// Navigation never enters a month without an allowed day, and a request
-/// made while a navigation is in progress is ignored. Listeners are notified
-/// when [currentMonth], the bounds, the animation settings or [isNavigating]
-/// change, and, with a clock, when the day of [today] changes. A change made
+/// An accepted navigation chooses a destination with an allowed day at
+/// acceptance. Sequential animations can display disabled intermediate months.
+/// A request made while a navigation is in progress is ignored. Listeners are
+/// notified when [currentMonth], the bounds, the animation settings or
+/// [isNavigating] change, and, with a clock, when the day of [today] changes.
+/// A change made
 /// while Flutter builds, lays out or paints a frame is announced after that
 /// frame. The app's first build runs before any frame, so a change made
 /// during it is announced at once.
@@ -53,8 +56,8 @@ class CalendarController extends ChangeNotifier {
   ///
   /// Throws an [ArgumentError] if [minDate] resolves after [maxDate] today, if
   /// a bound resolves outside the dates [DateTime] supports, or if the
-  /// starting month has no allowed day, and a [RangeError] if
-  /// [maxAnimatedMonthJump] is negative.
+  /// starting month has no allowed day or cannot form a complete grid, and
+  /// a [RangeError] if [maxAnimatedMonthJump] is negative.
   CalendarController({
     DateTime? initialMonth,
     ValueListenable<DateTime>? clock,
@@ -206,16 +209,17 @@ class CalendarController extends ChangeNotifier {
     return isDateSelectable(date, minDate: min, maxDate: max);
   }
 
-  /// Whether [month] has at least one allowed day.
+  /// Whether [month] supports a complete grid and has an allowed day.
   bool canGoTo(DateTime month) {
     final (:min, :max) = _resolvedBounds(today);
-    return _hasAllowedDay(normalizeMonth(month), min, max);
+    return _hasAllowedDay(month, min, max);
   }
 
   /// The month of [minDate] today, or null if there is no lower bound.
   ///
   /// When the bounds have crossed (as today moved), no month is allowed,
-  /// whatever this returns.
+  /// whatever this returns. Throws an [ArgumentError] if the bound month's
+  /// first local date is outside the dates DateTime supports.
   DateTime? get firstAllowedMonth {
     final min = _minDate?.resolve(today);
     return min == null ? null : normalizeMonth(min);
@@ -224,7 +228,8 @@ class CalendarController extends ChangeNotifier {
   /// The month of [maxDate] today, or null if there is no upper bound.
   ///
   /// When the bounds have crossed (as today moved), no month is allowed,
-  /// whatever this returns.
+  /// whatever this returns. Throws an [ArgumentError] if the bound month's
+  /// first local date is outside the dates DateTime supports.
   DateTime? get lastAllowedMonth {
     final max = _maxDate?.resolve(today);
     return max == null ? null : normalizeMonth(max);
@@ -242,7 +247,9 @@ class CalendarController extends ChangeNotifier {
   /// setting, the bounds, today, or a swipe that starts or lands in between
   /// can change the pages the request shows, so a host that loads these
   /// months should request the month right after asking.
-  List<DateTime> monthsOnWayTo(DateTime month) => _pagesTo(month, today);
+  List<DateTime> monthsOnWayTo(DateTime month) {
+    return _pagesTo(calendarMonthIndex(month), today);
+  }
 
   /// Completes when no navigation is in progress: at once if none is,
   /// otherwise when [isNavigating] turns off.
@@ -284,28 +291,29 @@ class CalendarController extends ChangeNotifier {
 
   /// Navigates to [month].
   ///
-  /// Ignored while [isNavigating]. If [month] has no allowed day, lands on
-  /// the allowed month nearest [month] among the allowed months in the
+  /// Ignored while [isNavigating]. If [month] has no allowed day or cannot
+  /// form a complete grid, lands on the supported allowed month nearest
+  /// [month] among the allowed months in the
   /// direction of [month] from [currentMonth]; if there is none, or it lands
   /// on [currentMonth], nothing happens. An accepted navigation sets
   /// [currentMonth] at once and notifies listeners.
-  void goToMonth(DateTime month) => _goTo(month, today);
+  void goToMonth(DateTime month) => _goTo(calendarMonthIndex(month), today);
 
   /// Navigates to the next month, as [goToMonth] does.
   void nextMonth() {
-    goToMonth(DateTime(_currentMonth.year, _currentMonth.month + 1, 1));
+    _goTo(calendarMonthIndex(_currentMonth) + 1, today);
   }
 
   /// Navigates to the previous month, as [goToMonth] does.
   void previousMonth() {
-    goToMonth(DateTime(_currentMonth.year, _currentMonth.month - 1, 1));
+    _goTo(calendarMonthIndex(_currentMonth) - 1, today);
   }
 
   /// Navigates to [today]'s month, as [goToMonth] does. Today is read once,
   /// for the target and the bounds alike.
   void goToToday() {
     final today = this.today;
-    _goTo(today, today);
+    _goTo(calendarMonthIndex(today), today);
   }
 
   /// Navigates to [month], from 1 to 12, of [year], as [goToMonth] does.
@@ -351,7 +359,8 @@ class CalendarController extends ChangeNotifier {
   }
 
   /// A swipe toward [month], the month next to [currentMonth] in the swipe's
-  /// direction, began on [calendar]. Called only while not [isNavigating].
+  /// direction, began on [calendar]. If the adjacent grid is unsupported,
+  /// [month] is [currentMonth]. Called only while not [isNavigating].
   ///
   /// Records as [calendarPages] the pages a request for [month] would show
   /// now, by the rule of [monthsOnWayTo]: empty if nothing would move,
@@ -360,7 +369,7 @@ class CalendarController extends ChangeNotifier {
   /// listeners are notified.
   @internal
   void calendarSwipeStarted(ControlledCalendar calendar, DateTime month) {
-    _pages = _pagesTo(month, today);
+    _pages = _pagesTo(calendarMonthIndex(month), today);
     _owing.add(calendar);
     _notify();
   }
@@ -441,7 +450,7 @@ class CalendarController extends ChangeNotifier {
   }
 
   /// The navigation of [goToMonth], with the bounds resolved against [today].
-  void _goTo(DateTime month, DateTime today) {
+  void _goTo(int month, DateTime today) {
     final pages = _pagesTo(month, today);
     if (pages.isEmpty) return;
     _currentMonth = pages.last;
@@ -453,10 +462,10 @@ class CalendarController extends ChangeNotifier {
   }
 
   /// The answer of [monthsOnWayTo], with the bounds resolved against [today].
-  List<DateTime> _pagesTo(DateTime month, DateTime today) {
+  List<DateTime> _pagesTo(int month, DateTime today) {
     if (isNavigating) return [];
     final (:min, :max) = _resolvedBounds(today);
-    final landing = _landingMonth(normalizeMonth(month), min, max);
+    final landing = _landingMonth(month, min, max);
     return landing == null ? [] : _pagesBetween(_currentMonth, landing);
   }
 
@@ -464,25 +473,18 @@ class CalendarController extends ChangeNotifier {
     return (min: _minDate?.resolve(today), max: _maxDate?.resolve(today));
   }
 
-  /// The month a request for [target] (a first of the month) lands on, or
-  /// null if nothing would move.
-  DateTime? _landingMonth(DateTime target, DateTime? min, DateTime? max) {
-    if (_hasAllowedDay(target, min, max)) {
-      return isSameMonth(target, _currentMonth) ? null : target;
+  /// The month a request for [target]'s month index lands on, or null if
+  /// nothing would move.
+  DateTime? _landingMonth(int target, DateTime? min, DateTime? max) {
+    final (:first, :last) = _allowedMonthRange(min, max);
+    if (first > last) return null;
+    final nearest = math.max(first, math.min(target, last));
+    final current = calendarMonthIndex(_currentMonth);
+    if (nearest == current ||
+        (nearest - current).sign != (target - current).sign) {
+      return null;
     }
-    if (_isCrossed(min, max)) return null;
-    // The target lies outside the allowed months. Without an upper bound, a
-    // target not before the lower bound's month would have an allowed day.
-    final first = min == null ? null : normalizeMonth(min);
-    final nearest = first != null && target.isBefore(first)
-        ? first
-        : normalizeMonth(max!);
-    // A target in the current month has direction 0; the nearest month has
-    // an allowed day, so it is another month, and the result is null.
-    final direction = monthsDelta(_currentMonth, target).sign;
-    return monthsDelta(_currentMonth, nearest).sign == direction
-        ? nearest
-        : null;
+    return calendarMonthFromIndex(nearest);
   }
 
   /// The pages shown on the way from [from] to [to], two different months.
@@ -512,7 +514,15 @@ class CalendarController extends ChangeNotifier {
     DateConstraint? maxDate,
   ) {
     final (:min, :max) = _resolveNotCrossed(minDate, maxDate, today);
-    final month = normalizeMonth(initialMonth ?? today);
+    final requested = initialMonth ?? today;
+    if (!isSupportedCalendarMonthIndex(calendarMonthIndex(requested))) {
+      throw ArgumentError.value(
+        requested,
+        'initialMonth',
+        'Cannot form a complete grid within the dates DateTime supports',
+      );
+    }
+    final month = normalizeMonth(requested);
     if (!_hasAllowedDay(month, min, max)) {
       throw ArgumentError.value(month, 'initialMonth', 'Has no allowed day');
     }
@@ -538,10 +548,27 @@ class CalendarController extends ChangeNotifier {
     return min != null && max != null && min.isAfter(max);
   }
 
+  static ({int first, int last}) _allowedMonthRange(
+    DateTime? min,
+    DateTime? max,
+  ) {
+    if (_isCrossed(min, max)) return (first: 1, last: 0);
+    return (
+      first: math.max(
+        firstCalendarMonthIndex,
+        min == null ? firstCalendarMonthIndex : calendarMonthIndex(min),
+      ),
+      last: math.min(
+        lastCalendarMonthIndex,
+        max == null ? lastCalendarMonthIndex : calendarMonthIndex(max),
+      ),
+    );
+  }
+
   static bool _hasAllowedDay(DateTime month, DateTime? min, DateTime? max) {
-    if (_isCrossed(min, max)) return false;
-    return (min == null || !lastDayOfMonth(month).isBefore(min)) &&
-        (max == null || !month.isAfter(max));
+    final (:first, :last) = _allowedMonthRange(min, max);
+    final index = calendarMonthIndex(month);
+    return index >= first && index <= last;
   }
 }
 

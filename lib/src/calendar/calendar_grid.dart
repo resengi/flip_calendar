@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../style/calendar_style.dart';
@@ -72,20 +74,31 @@ class CalendarGrid extends StatelessWidget {
         color: style.calendarBackground,
         child: Padding(
           padding: style.padding,
-          child: Column(
-            children: [
-              _WeekdayHeader(style: style, weekdayNames: _rotatedWeekdayNames),
-              // Each cell draws its own right and bottom line, so the frame
-              // draws only the left one, and every cell has the same size.
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border(left: _gridLine(style)),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Column(
+                children: [
+                  _WeekdayHeader(
+                    style: style,
+                    weekdayNames: _rotatedWeekdayNames,
+                    height: math.min(
+                      style.weekdayHeaderHeight,
+                      constraints.maxHeight,
+                    ),
                   ),
-                  child: _buildGrid(),
-                ),
-              ),
-            ],
+                  // Each cell draws its own right and bottom line, so the
+                  // frame draws only the left one.
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border(left: _gridLine(style)),
+                      ),
+                      child: _buildGrid(),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -164,9 +177,14 @@ BorderSide _gridLine(CalendarStyle style) {
 
 /// Displays the weekday names header row above the calendar grid.
 class _WeekdayHeader extends StatelessWidget {
-  const _WeekdayHeader({required this.style, required this.weekdayNames});
+  const _WeekdayHeader({
+    required this.style,
+    required this.weekdayNames,
+    required this.height,
+  });
 
   final CalendarStyle style;
+  final double height;
 
   /// Weekday names to display (already rotated for firstDayOfWeek).
   final List<String> weekdayNames;
@@ -177,7 +195,7 @@ class _WeekdayHeader extends StatelessWidget {
     // Each name draws its own right line, as each day cell does, so the
     // names line up with the day columns.
     return Container(
-      height: style.weekdayHeaderHeight,
+      height: height,
       decoration: BoxDecoration(
         color: style.weekdayHeaderBackground,
         border: Border(left: line, top: line, bottom: line),

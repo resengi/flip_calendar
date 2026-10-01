@@ -10,7 +10,8 @@ class MonthGrid {
   /// [month] can be any date within the target month.
   /// [firstDayOfWeek] controls which day starts each row, from
   /// [DateTime.monday] (1) to [DateTime.sunday] (7); any other value throws a
-  /// [RangeError].
+  /// [RangeError]. A month that cannot form a complete grid within the
+  /// dates DateTime supports also throws a [RangeError].
   factory MonthGrid.forMonth(DateTime month, {required int firstDayOfWeek}) {
     RangeError.checkValueInInterval(
       firstDayOfWeek,
@@ -18,6 +19,12 @@ class MonthGrid {
       DateTime.sunday,
       'firstDayOfWeek',
     );
+    if (!isSupportedCalendarMonthIndex(calendarMonthIndex(month))) {
+      throw RangeError(
+        'month ($month) cannot form a complete grid '
+        'within the dates DateTime supports',
+      );
+    }
     final firstOfMonth = normalizeMonth(month);
     final lastOfMonth = lastDayOfMonth(month);
 

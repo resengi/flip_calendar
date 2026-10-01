@@ -7,8 +7,9 @@ import 'package:page_turn_animation/page_turn_animation.dart';
 
 /// Style configuration for [FlipCalendar].
 ///
-/// Every field has a default. [copyWith] returns a copy with the given
-/// fields replaced and every other field kept as it is in this style.
+/// Every field has a default. [copyWith] replaces fields supplied with a
+/// non-null value. Omitted arguments and null keep the existing field,
+/// including [weekdayTextStyle].
 ///
 /// Each field whose doc states a rule is checked when a calendar builds with
 /// this style: a value that breaks its rule makes the build throw an
@@ -110,7 +111,8 @@ class CalendarStyle {
   /// Text color for weekday names (used in default text style).
   final Color weekdayHeaderTextColor;
 
-  /// Height of the weekday header row. Must be finite and not negative.
+  /// Height of the weekday header row, limited by the available content
+  /// height. Must be finite and not negative.
   final double weekdayHeaderHeight;
 
   /// Custom text style for weekday names. If null, uses a default style.

@@ -212,12 +212,16 @@ controller.setBounds(null, null);
 - A constraint holds a rule, not a date. The controller resolves it against its `today` whenever it needs the date, so `today()` and `relative(...)` move with the day.
 - `relative` adds years and months first, keeping today's day of the month but capping it at the last day of the resulting month, then adds days: from January 31, `months: 1` gives the last day of February, and `months: 1, days: 1` gives March 1.
 - `fixed` keeps only the date's calendar day.
-- Both bounds are inclusive. Days outside them are disabled, and navigation never enters a month with no allowed day.
+- Both bounds are inclusive. Days outside them are disabled. An accepted navigation chooses a destination with an allowed day at acceptance; a sequential animation can display disabled intermediate months.
 - `setBounds` replaces both bounds and notifies only if a bound changed. Constraints compare by their rule: `DateConstraint.today()` equals `DateConstraint.relative()`, but `relative(years: 1)` does not equal `relative(months: 12)`.
 - A month that loses its allowed days while it is shown (because the bounds or today changed) stays shown, with its days disabled.
 - Bounds that cross later, as today moves, are not an error: no month is allowed, and every request moves nothing.
 
-To ask about the range, use `isDateAllowed(date)`, `canGoTo(month)` (the month has at least one allowed day), `firstAllowedMonth` and `lastAllowedMonth`.
+To ask about the range, use `isDateAllowed(date)`, `canGoTo(month)` (the month supports a complete grid and has an allowed day), `firstAllowedMonth` and `lastAllowedMonth`.
+
+Displayed months run from May -271821 through August 275760. These complete months leave room for every first-day-of-week layout within [Dart's DateTime range](https://api.dart.dev/dart-core/DateTime-class.html). `canGoTo` returns false outside that display range; navigation requests use the same nearest-allowed-month rule. Constraints resolve representable individual days, including days in the partial endpoint months.
+
+`firstAllowedMonth` and `lastAllowedMonth` return the first local date of each explicit bound's month, or null for an open side. When bounds cross, the getters retain the bound months even though no month is allowed. A getter throws if that first local date is outside DateTime's range.
 
 ### Today and the Clock
 
@@ -432,7 +436,7 @@ FlipCalendar(
 
 ### Using copyWith
 
-`copyWith` returns a copy with the given fields replaced and every other field kept as it is in the style it is called on:
+`copyWith` replaces fields supplied with a non-null value. Omitted arguments and null keep the existing field, including `weekdayTextStyle`:
 
 ```dart
 final customStyle = CalendarStyle.dark().copyWith(
@@ -471,7 +475,7 @@ Every day cell has the same size.
 |----------|------|---------|-------------|
 | `weekdayHeaderBackground` | `Color` | `Color(0xFFF5F5F5)` | Background of the header row |
 | `weekdayHeaderTextColor` | `Color` | `Color(0xDD000000)` | Text color of the names in the default text style |
-| `weekdayHeaderHeight` | `double` | `40.0` | Height of the header row. Finite and not negative |
+| `weekdayHeaderHeight` | `double` | `40.0` | Height of the header row, limited by the available height inside padding. Finite and not negative |
 | `weekdayTextStyle` | `TextStyle?` | `null` | Text style of the names. When set, it replaces the whole default style (weight 500, size 14, `weekdayHeaderTextColor`) |
 | `weekdayNames` | `List<String>` | `['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']` | Weekday names starting from Sunday, rotated to `firstDayOfWeek`. Exactly 7 names |
 
@@ -524,7 +528,7 @@ Invalid values throw in all builds, with an error that names the value:
 
 | Value | Checked | Rule | Error |
 |-------|---------|------|-------|
-| `initialMonth` | `CalendarController()` | The month has an allowed day | `ArgumentError` |
+| `initialMonth` | `CalendarController()` | The month supports a complete grid and has an allowed day | `ArgumentError` |
 | `minDate`, `maxDate` | `CalendarController()`, `setBounds` | `minDate` is not after `maxDate` today, and both resolve to dates `DateTime` supports | `ArgumentError` |
 | `maxAnimatedMonthJump` | `CalendarController()`, setter | Not negative | `RangeError` |
 | `goToYearMonth(year, month)` | Call | `month` from 1 to 12, and a month `DateTime` supports | `RangeError` |
@@ -771,21 +775,6 @@ SizedBox(
   ),
 )
 ```
-
-## Migrating from 0.1.2
-
-- `FlipCalendar` no longer takes `minDate`, `maxDate`, `animationsEnabled`, `maxAnimatedMonthJump` or `multiMonthAnimationMode`; set them on the controller.
-- `CalendarController.isAnimating` is replaced by `isNavigating`, and `setAnimating` is removed.
-- `DateConstraint.resolve` takes today; `MonthGrid.forMonth` requires `firstDayOfWeek`.
-- Invalid inputs throw in release builds too.
-- A request made while a navigation is in progress is ignored.
-- A request that finds the calendar not on screen changes the month without a page turn.
-- Swipes work with animations off.
-- Relative constraints cap month ends; constraints compare by their rule, and `toString` describes the rule.
-- `setBounds` and the animation setters notify only on a real change.
-- After `dispose()`, `whenShown()` and `whenAtRest()` complete at once, and a call that notifies raises `ChangeNotifier`'s debug assertion.
-- Calls that notify listeners need Flutter's binding (see [CalendarController](#calendarcontroller)).
-- New: `whenShown()`, `whenAtRest()`, `monthsOnWayTo()`, `today` and the `clock`, `setBounds()`, `isDateAllowed()`, `canGoTo()`, `firstAllowedMonth` and `lastAllowedMonth`; a controller can drive several calendars, and a calendar can switch controllers.
 
 ## License
 

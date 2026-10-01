@@ -148,7 +148,8 @@ class _FlipCalendarState extends State<FlipCalendar>
 
   /// The month the page turn in progress, or the swipe, turns to: for a
   /// swipe, the landing month, or the adjacent month when the swipe is
-  /// restricted. Set until the calendar goes idle, also during a swipe with
+  /// restricted. An unsupported adjacent grid uses the shown month instead.
+  /// Set until the calendar goes idle, also during a swipe with
   /// animations off, when the phase stays idle.
   DateTime? _targetMonth;
 
@@ -421,7 +422,10 @@ class _FlipCalendarState extends State<FlipCalendar>
     if (controller.isNavigating) return;
     final forward = direction == DragDirection.next;
     final month = controller.currentMonth;
-    final adjacent = DateTime(month.year, month.month + (forward ? 1 : -1));
+    final adjacentIndex = calendarMonthIndex(month) + (forward ? 1 : -1);
+    final adjacent = isSupportedCalendarMonthIndex(adjacentIndex)
+        ? calendarMonthFromIndex(adjacentIndex)
+        : month;
     // Read before the swipe is registered: listeners of that notification may
     // change it, and the swipe keeps the setting it started with. A calendar
     // whose animations are paused swipes as with animations off.

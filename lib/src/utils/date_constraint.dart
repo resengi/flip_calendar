@@ -94,12 +94,14 @@ class _RelativeDateConstraint extends DateConstraint {
   @override
   DateTime resolve(DateTime today) {
     try {
-      final month = DateTime(today.year + years, today.month + months);
-      final lastDay = lastDayOfMonth(month).day;
+      final (:year, :month) = normalizeYearMonth(
+        today.year + years,
+        today.month + months,
+      );
       return DateTime(
-        month.year,
-        month.month,
-        math.min(today.day, lastDay) + days,
+        year,
+        month,
+        math.min(today.day, daysInMonth(year, month)) + days,
       );
     } on ArgumentError {
       // DateTime's constructor throws this, and only this, for a date
