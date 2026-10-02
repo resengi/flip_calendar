@@ -71,6 +71,8 @@ void main() {
 
       await tester.pumpWidget(subject());
       final first = await tester.startGesture(tester.getCenter(handler));
+      // The first move crosses the drag threshold and is discarded.
+      await first.moveBy(const Offset(0, -20));
       await first.moveBy(const Offset(0, -40));
       expect(begins, [DragDirection.next]);
 
@@ -201,6 +203,8 @@ void main() {
             final gesture = await tester.startGesture(
               tester.getCenter(handler),
             );
+            // The first move crosses the drag threshold and is discarded.
+            await gesture.moveBy(const Offset(0, -20));
             await gesture.moveBy(Offset(0, -distance));
             await gesture.up();
             return reports.last;
@@ -243,6 +247,7 @@ void main() {
           'the rest of the drag is ignored', (tester) async {
         final reports = await pumpHandler(tester);
         final gesture = await tester.startGesture(tester.getCenter(handler));
+        await gesture.moveBy(const Offset(0, -15));
         await gesture.moveBy(const Offset(0, -15));
         await gesture.moveBy(const Offset(0, -15));
         expect(reports.first, 'begin next');
@@ -292,6 +297,7 @@ void main() {
         final gesture = await tester.startGesture(tester.getCenter(handler));
         await gesture.moveBy(const Offset(0, -15));
         await gesture.moveBy(const Offset(0, -15));
+        await gesture.moveBy(const Offset(0, -15));
         expect(reports.first, 'begin next');
 
         final changed = await pumpHandler(
@@ -310,6 +316,7 @@ void main() {
           'without an end', (tester) async {
         final reports = await pumpHandler(tester);
         final gesture = await tester.startGesture(tester.getCenter(handler));
+        await gesture.moveBy(const Offset(0, -15));
         await gesture.moveBy(const Offset(0, -15));
         await gesture.moveBy(const Offset(0, -15));
         expect(reports.first, 'begin next');
@@ -369,8 +376,9 @@ void main() {
         await pumpHandler(tester);
         final reports = await pumpHandler(tester, boundEdge: PageTurnEdge.left);
 
-        // 300 * 0.7 = 210px drag box; 70px gives progress ≈ 0.33
-        await tester.drag(handler, const Offset(-70, 0));
+        // 300 * 0.7 = 210px drag box; 70px after the 20px that cross the
+        // threshold gives progress ≈ 0.33
+        await tester.drag(handler, const Offset(-90, 0));
 
         expect(reports.last, 'complete true');
       });
@@ -380,6 +388,8 @@ void main() {
         final reports = await pumpHandler(tester, size: const Size(300, 200));
         final gesture = await tester.startGesture(tester.getCenter(handler));
 
+        // The first move crosses the drag threshold and is discarded.
+        await gesture.moveBy(const Offset(0, -20));
         // 200 * 0.7 = 140 px drag box.
         await gesture.moveBy(const Offset(0, -70));
 
@@ -402,20 +412,20 @@ void main() {
 
       // The 400 px handler's drag box is 280 px: each 50 px is 0.179.
 
-      testWidgets('a drag of one move has that move as its progress', (
-        tester,
-      ) async {
+      testWidgets('the move that crosses the threshold is discarded, and the '
+          'next is the first progress', (tester) async {
         final reports = await pumpHandler(tester);
         final gesture = await tester.startGesture(tester.getCenter(handler));
 
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -100));
         await gesture.up();
 
         expect(reports, ['begin next', 'progress 0.357', 'complete true']);
       });
 
-      testWidgets('progress is the distance from where the finger went '
-          'down, even with a tappable child', (tester) async {
+      testWidgets('progress counts from the point of acceptance, with a '
+          'tappable child', (tester) async {
         final reports = await pumpHandler(
           tester,
           child: GestureDetector(
@@ -425,14 +435,16 @@ void main() {
         );
         final gesture = await tester.startGesture(tester.getCenter(handler));
 
-        // The drag is accepted after the second move, past the touch slop.
-        for (var i = 0; i < 9; i++) {
+        // The drag is accepted on the second move, past the touch slop, and
+        // Flutter discards that move: the ten after it are progress.
+        for (var i = 0; i < 12; i++) {
           await gesture.moveBy(const Offset(0, -10));
         }
         await gesture.up();
 
         expect(reports, [
           'begin next',
+          'progress 0.036',
           'progress 0.071',
           'progress 0.107',
           'progress 0.143',
@@ -441,16 +453,18 @@ void main() {
           'progress 0.250',
           'progress 0.286',
           'progress 0.321',
+          'progress 0.357',
           'complete true',
         ]);
       });
 
       testWidgets('progress falls back to 0 past the start, and rises again '
-          'only past the start', (tester) async {
+          'as soon as the finger turns back', (tester) async {
         final reports = await pumpHandler(tester);
         final gesture = await tester.startGesture(tester.getCenter(handler));
 
-        for (final dy in [-50, -50, 50, 50, 50, -50, -50, -50]) {
+        // The first move crosses the drag threshold and is discarded.
+        for (final dy in [-20, -50, -50, 50, 50, 50, -50, -50, -50]) {
           await gesture.moveBy(Offset(0, dy.toDouble()));
         }
         await gesture.up();
@@ -462,10 +476,31 @@ void main() {
           'progress 0.179',
           'progress 0.000',
           'progress 0.000',
-          'progress 0.000',
           'progress 0.179',
           'progress 0.357',
+          'progress 0.536',
           'complete true',
+        ]);
+      });
+
+      testWidgets('progress stops at 1 past the drag box, and falls again as '
+          'soon as the finger turns back', (tester) async {
+        final reports = await pumpHandler(tester);
+        final gesture = await tester.startGesture(tester.getCenter(handler));
+
+        // The first move crosses the drag threshold and is discarded.
+        for (final dy in [-20, -100, -100, -100, -50, 50, 50]) {
+          await gesture.moveBy(Offset(0, dy.toDouble()));
+        }
+
+        expect(reports, [
+          'begin next',
+          'progress 0.357',
+          'progress 0.714',
+          'progress 1.000',
+          'progress 1.000',
+          'progress 0.821',
+          'progress 0.643',
         ]);
       });
 
@@ -477,7 +512,9 @@ void main() {
         );
         final gesture = await tester.startGesture(tester.getCenter(handler));
 
-        // 25 px on screen is 50 px in the handler.
+        // 25 px on screen is 50 px in the handler. The first move crosses
+        // the threshold and is discarded.
+        await gesture.moveBy(const Offset(0, -25));
         await gesture.moveBy(const Offset(0, -25));
         await gesture.moveBy(const Offset(0, -25));
 
@@ -492,7 +529,9 @@ void main() {
         );
         final gesture = await tester.startGesture(tester.getCenter(handler));
 
-        // Down on screen is up in the handler.
+        // Down on screen is up in the handler. The first move crosses the
+        // threshold and is discarded.
+        await gesture.moveBy(const Offset(0, 50));
         await gesture.moveBy(const Offset(0, 50));
         await gesture.moveBy(const Offset(0, 50));
 
@@ -505,6 +544,8 @@ void main() {
           final reports = await pumpHandler(tester);
           final gesture = await tester.startGesture(tester.getCenter(handler));
 
+          // The first move crosses the drag threshold and is discarded.
+          await gesture.moveBy(const Offset(0, -20));
           await gesture.moveBy(const Offset(0, -50));
           await gesture.moveBy(const Offset(30, 0));
           await gesture.moveBy(const Offset(0, -50));
@@ -512,23 +553,6 @@ void main() {
           expect(reports, ['begin next', 'progress 0.179', 'progress 0.357']);
         },
       );
-
-      testWidgets('progress stops at 1 past the drag box', (tester) async {
-        final reports = await pumpHandler(tester);
-        final gesture = await tester.startGesture(tester.getCenter(handler));
-
-        for (final dy in [-100, -100, -100, -50]) {
-          await gesture.moveBy(Offset(0, dy.toDouble()));
-        }
-
-        expect(reports, [
-          'begin next',
-          'progress 0.357',
-          'progress 0.714',
-          'progress 1.000',
-          'progress 1.000',
-        ]);
-      });
     });
 
     group('flicks', () {

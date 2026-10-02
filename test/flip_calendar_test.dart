@@ -1036,7 +1036,9 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
-        // 60 px: below the threshold, so the swipe does not move.
+        // 20 px cross the drag threshold, then 60 px: below the threshold,
+        // so the swipe does not move.
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -60));
         controller.goToMonth(DateTime(2024, 9, 1));
         await gesture.up();
@@ -1053,6 +1055,7 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -50));
 
         expect(controller.isNavigating, isTrue);
@@ -1300,6 +1303,8 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        // The first move crosses the drag threshold and is discarded.
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -20));
         await tester.pump();
         await tester.pump();
@@ -1312,6 +1317,45 @@ void main() {
           find.byType(PageTurnAnimation),
         );
         expect(turn.animation.value, closeTo(76 / 280, 0.0001));
+
+        await gesture.up();
+        await tester.pumpAndSettle();
+      });
+
+      testWidgets("the page follows the finger through the style's dragCurve", (
+        tester,
+      ) async {
+        final animated = createController(animationsEnabled: true);
+
+        await tester.pumpWidget(
+          app(
+            page(
+              calendar(
+                calendarController: animated,
+                style: const CalendarStyle(dragCurve: Curves.decelerate),
+              ),
+            ),
+          ),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(FlipCalendar)),
+        );
+        // The first move crosses the drag threshold and is discarded.
+        await gesture.moveBy(const Offset(0, -20));
+        await gesture.moveBy(const Offset(0, -20));
+        await tester.pump();
+        await tester.pump();
+        await gesture.moveBy(const Offset(0, -56));
+        await tester.pump();
+
+        final turn = tester.widget<PageTurnAnimation>(
+          find.byType(PageTurnAnimation),
+        );
+        expect(
+          turn.animation.value,
+          closeTo(Curves.decelerate.transform(76 / 280), 0.0001),
+        );
 
         await gesture.up();
         await tester.pumpAndSettle();
@@ -1379,6 +1423,8 @@ void main() {
           final gesture = await tester.startGesture(
             tester.getCenter(find.byType(FlipCalendar)),
           );
+          // The first move crosses the drag threshold and is discarded.
+          await gesture.moveBy(const Offset(0, -20));
           await gesture.moveBy(const Offset(0, -20));
           await tester.pump();
           await tester.pump();
@@ -1477,6 +1523,8 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        // The first move crosses the drag threshold and is discarded.
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -70));
         await tester.pump();
         await tester.pump();
@@ -1502,6 +1550,7 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -60));
         await tester.pump();
         await tester.pump();
@@ -2808,6 +2857,7 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -50));
         expectCaptureError(await pumpReportingErrors(tester));
         expect(animated.isNavigating, isFalse);
@@ -2937,6 +2987,7 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -50));
 
         await tester.pumpWidget(app(page(calendar(gesturesEnabled: false))));
@@ -2999,6 +3050,7 @@ void main() {
         );
         await gesture.moveBy(const Offset(0, -15));
         await gesture.moveBy(const Offset(0, -15));
+        await gesture.moveBy(const Offset(0, -15));
         expect(controller.isNavigating, isTrue);
 
         await tester.pumpWidget(
@@ -3026,6 +3078,7 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -50));
 
         await tester.pumpWidget(
@@ -3046,6 +3099,7 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -50));
 
         await tester.pumpWidget(

@@ -505,9 +505,10 @@ class _FlipCalendarState extends State<FlipCalendar>
 
   void _onDragProgress(double progress) {
     if (!_dragActive) return;
+    final turned = widget.style.dragCurve.transform(progress);
     _flipController.value = _isRestricted
-        ? math.min(progress, _restrictedMaxProgress)
-        : progress;
+        ? math.min(turned, _restrictedMaxProgress)
+        : turned;
   }
 
   void _onDragComplete(bool shouldComplete) {

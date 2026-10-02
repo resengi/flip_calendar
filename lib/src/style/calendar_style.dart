@@ -65,6 +65,7 @@ class CalendarStyle {
     // Animation
     this.animationDuration = const Duration(milliseconds: 650),
     this.animationCurve = Curves.decelerate,
+    this.dragCurve = Curves.linear,
     this.pageTurnStyle = const PageTurnStyle(),
     // Gestures
     this.flickDistanceThreshold = 0.05,
@@ -178,8 +179,15 @@ class CalendarStyle {
   /// Easing curve for the part of a page turn that runs by itself: each turn
   /// of a navigation, and a swipe's turn after release, from where the
   /// release leaves the page. While a swipe is dragged, the page follows the
-  /// finger linearly.
+  /// finger through [dragCurve].
   final Curve animationCurve;
+
+  /// Maps a swipe's progress, how far the finger has moved through the drag
+  /// box, to how far the page is turned while the finger is down. The default
+  /// keeps the page under the finger; a curve such as [Curves.decelerate]
+  /// turns it ahead of the finger. Does not affect when a released swipe
+  /// completes.
+  final Curve dragCurve;
 
   /// Style for the page-turn effect (from `page_turn_animation` package).
   final PageTurnStyle pageTurnStyle;
@@ -243,6 +251,7 @@ class CalendarStyle {
     Color? disabledDateBackground,
     Duration? animationDuration,
     Curve? animationCurve,
+    Curve? dragCurve,
     PageTurnStyle? pageTurnStyle,
     double? flickDistanceThreshold,
     Duration? flickMaxDuration,
@@ -275,6 +284,7 @@ class CalendarStyle {
           disabledDateBackground ?? this.disabledDateBackground,
       animationDuration: animationDuration ?? this.animationDuration,
       animationCurve: animationCurve ?? this.animationCurve,
+      dragCurve: dragCurve ?? this.dragCurve,
       pageTurnStyle: pageTurnStyle ?? this.pageTurnStyle,
       flickDistanceThreshold:
           flickDistanceThreshold ?? this.flickDistanceThreshold,
@@ -312,6 +322,7 @@ class CalendarStyle {
         other.disabledDateBackground == disabledDateBackground &&
         other.animationDuration == animationDuration &&
         other.animationCurve == animationCurve &&
+        other.dragCurve == dragCurve &&
         other.pageTurnStyle == pageTurnStyle &&
         other.flickDistanceThreshold == flickDistanceThreshold &&
         other.flickMaxDuration == flickMaxDuration &&
@@ -342,6 +353,7 @@ class CalendarStyle {
     disabledDateBackground,
     animationDuration,
     animationCurve,
+    dragCurve,
     pageTurnStyle,
     flickDistanceThreshold,
     flickMaxDuration,

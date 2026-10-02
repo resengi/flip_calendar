@@ -163,6 +163,7 @@ void main() {
       final gesture = await tester.startGesture(
         tester.getCenter(find.byType(FlipCalendar)),
       );
+      await gesture.moveBy(Offset(0, forward ? -20 : 20));
       await gesture.moveBy(Offset(0, forward ? -100 : 100));
       await tester.pump();
       await gesture.cancel();
@@ -219,6 +220,7 @@ void main() {
     final gesture = await tester.startGesture(
       tester.getCenter(find.byType(FlipCalendar)),
     );
+    await gesture.moveBy(const Offset(0, -20));
     await gesture.moveBy(const Offset(0, -100));
     await tester.pump();
     await tester.pumpWidget(subject(gesturesEnabled: false));
@@ -349,6 +351,7 @@ void main() {
       final gesture = await tester.startGesture(
         tester.getCenter(find.byType(FlipCalendar)),
       );
+      await gesture.moveBy(const Offset(0, 20));
       await gesture.moveBy(const Offset(0, 100));
       await tester.pump();
       final replacement = CalendarController(initialMonth: DateTime(2024, 8));
@@ -393,6 +396,7 @@ void main() {
       final gesture = await tester.startGesture(
         tester.getCenter(find.byType(FlipCalendar)),
       );
+      await gesture.moveBy(Offset(0, forward ? -20 : 20));
       await gesture.moveBy(Offset(0, forward ? -100 : 100));
       await tester.pump();
       expect(find.byKey(key, skipOffstage: false), findsOneWidget);
@@ -485,6 +489,7 @@ void main() {
     final gesture = await tester.startGesture(
       tester.getCenter(find.byType(FlipCalendar)),
     );
+    await gesture.moveBy(const Offset(0, 20));
     await gesture.moveBy(const Offset(0, 100));
     await tester.pump();
     await tester.pump();
@@ -512,6 +517,7 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        await gesture.moveBy(const Offset(0, -20));
         await gesture.moveBy(const Offset(0, -200));
         await tester.pump();
         await tester.pump();

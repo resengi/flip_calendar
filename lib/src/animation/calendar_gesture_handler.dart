@@ -13,10 +13,12 @@ enum DragDirection { next, previous }
 /// use the horizontal axis. The starting pointer is followed until it ends.
 /// A drag begins after Flutter accepts it and its drag threshold is crossed.
 /// Its direction is the net movement along the axis in the first delivered
-/// update. Progress is reported from that update onward and includes movement
-/// from pointer down, measured in this widget's coordinates. Progress is 0 to
-/// 1 over [CalendarStyle.dragBoxSizePercentage] of the axis size; movement
-/// back past the start gives 0.
+/// update. Progress is reported from that update onward and counts movement
+/// from the point where the drag was accepted, measured in this widget's
+/// coordinates. Progress is 0 to 1 over
+/// [CalendarStyle.dragBoxSizePercentage] of the axis size. Travel past
+/// either end of that box is discarded, so the page follows a reversal at
+/// once: back past the start it rests at 0 until the finger moves on again.
 ///
 /// A begun drag reports one end on release or pointer cancellation. A flick
 /// in its direction completes it; an opposite flick cancels it. Other
@@ -73,20 +75,21 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
   /// The sign of the first delivered axis update, or 0 when no drag is active.
   double _sign = 0;
 
-  /// The distance moved along the axis since the pointer went down, in this
-  /// widget's coordinates.
+  /// The distance moved in the drag's direction since it was accepted, in
+  /// this widget's coordinates, kept within the drag box: travel past either
+  /// end is discarded.
   double _moved = 0;
 
   /// Whether updates are ignored after a drag is dropped or its axis has
   /// no size. A new pointer-down clears this flag.
   bool _ignoring = false;
 
-  /// The drag's progress: the distance moved in its direction over the drag
-  /// box, from 0 to 1. Back past the start it is 0.
-  double get _progress {
-    final dragBox = _extent * widget.style.dragBoxSizePercentage;
-    return (_moved * _sign / dragBox).clamp(0.0, 1.0);
-  }
+  /// The drag box: the distance along the axis that turns the page all the
+  /// way.
+  double get _dragBox => _extent * widget.style.dragBoxSizePercentage;
+
+  /// The drag's progress, from 0 to 1.
+  double get _progress => _moved / _dragBox;
 
   /// The style's flick speed at this widget's size, in pixels per second.
   double get _flickSpeed {
@@ -106,7 +109,6 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
     final delta = details.primaryDelta!;
     // A move with no motion along the axis has no direction to read.
     if (_ignoring || delta == 0) return;
-    _moved += delta;
     if (_sign == 0) {
       _sign = delta.sign;
       widget.onDragBegin(
@@ -115,6 +117,7 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
             : DragDirection.previous,
       );
     }
+    _moved = (_moved + delta * _sign).clamp(0.0, _dragBox);
     widget.onDragProgress(_progress);
   }
 
@@ -175,9 +178,9 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
           recognizer
             ..gestureSettings = gestureSettings
             ..onlyAcceptDragOnThreshold = true
-            // The movement made before the drag is accepted arrives as its
-            // first update.
-            ..dragStartBehavior = DragStartBehavior.down
+            // The movement made before the drag is accepted is discarded:
+            // the page rises from flat under the finger.
+            ..dragStartBehavior = DragStartBehavior.start
             // A flick is a release at more than the style's speed, with
             // Flutter's standard minimum distance.
             ..minFlingVelocity = _flickSpeed

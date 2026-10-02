@@ -31,6 +31,7 @@ void main() {
         disabledDateBackground: const Color(0xFF000009),
         animationDuration: const Duration(milliseconds: 1),
         animationCurve: Curves.linear,
+        dragCurve: Curves.decelerate,
         pageTurnStyle: const PageTurnStyle(segments: 1),
         flickDistanceThreshold: 0.5,
         flickMaxDuration: const Duration(milliseconds: 1),
@@ -71,6 +72,7 @@ void main() {
         equals(const Duration(milliseconds: 650)),
       );
       expect(style.animationCurve, equals(Curves.decelerate));
+      expect(style.dragCurve, equals(Curves.linear));
       expect(style.pageTurnStyle, equals(const PageTurnStyle()));
       expect(style.flickDistanceThreshold, equals(0.05));
       expect(style.flickMaxDuration, equals(const Duration(milliseconds: 500)));
@@ -139,6 +141,7 @@ void main() {
           disabledDateBackground: other.disabledDateBackground,
           animationDuration: other.animationDuration,
           animationCurve: other.animationCurve,
+          dragCurve: other.dragCurve,
           pageTurnStyle: other.pageTurnStyle,
           flickDistanceThreshold: other.flickDistanceThreshold,
           flickMaxDuration: other.flickMaxDuration,
@@ -211,6 +214,7 @@ void main() {
           animationDuration: other.animationDuration,
         ),
         'animationCurve': CalendarStyle(animationCurve: other.animationCurve),
+        'dragCurve': CalendarStyle(dragCurve: other.dragCurve),
         'pageTurnStyle': CalendarStyle(pageTurnStyle: other.pageTurnStyle),
         'flickDistanceThreshold': CalendarStyle(
           flickDistanceThreshold: other.flickDistanceThreshold,
@@ -226,7 +230,7 @@ void main() {
         ),
       };
 
-      expect(differInOneField, hasLength(26));
+      expect(differInOneField, hasLength(27));
       for (final MapEntry(key: field, value: style)
           in differInOneField.entries) {
         expect(style, isNot(equals(const CalendarStyle())), reason: field);

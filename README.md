@@ -46,7 +46,7 @@ Add the package to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flip_calendar: ^0.1.0
+  flip_calendar: ^0.1.2
   page_turn_animation: ^0.1.4
 ```
 
@@ -302,7 +302,7 @@ FlipCalendar(
 ### Swipes
 
 - A swipe follows the finger that started it; other fingers are ignored until it lifts. Its direction is the net movement along the swipe axis when the drag threshold is crossed.
-- While the finger moves, the page follows it: the distance moved along the axis, over `dragBoxSizePercentage` of the calendar's size along the axis. Moving back past the start leaves the page flat; a swipe never turns the other way.
+- While the finger moves, the page follows it: the distance moved along the axis since the drag was accepted, over `dragBoxSizePercentage` of the calendar's size along the axis, mapped through `dragCurve`. Travel past either end of that box is discarded, so the page follows a reversal at once; back past the start it rests flat. A swipe never turns the other way.
 - On release, a flick in the swipe's direction completes it and a flick against it does not. Without a flick, the swipe completes when the page is turned at least `dragProgressThreshold` of the way. A flick is a release faster than `flickDistanceThreshold` of the calendar's size along the axis per `flickMaxDuration`, that passes Flutter's minimum fling distance for the pointer device.
 - A swipe that does not complete turns the page back, and the month does not change. A cancelled pointer, the calendar collapsing to no size, a change of `boundEdge`, turning `gesturesEnabled` off, or an input that fails its check (see [Validation](#validation)) ends a swipe the same way.
 - A swipe toward a month outside the bounds, with no allowed month beyond it in that direction, cannot land: the page lifts slightly and turns back, and `onHapticFeedback` is called once with `CalendarHapticType.navigationRestricted` when the swipe starts. With animations off, only the haptic happens.
@@ -528,7 +528,8 @@ The calendar does not draw with these fields; a day builder can read them from t
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `animationDuration` | `Duration` | `Duration(milliseconds: 650)` | Duration of a page turn. A navigation that turns several pages divides it equally among them. Not negative |
-| `animationCurve` | `Curve` | `Curves.decelerate` | Curve of the part of a page turn that runs by itself: each turn of a navigation, and a swipe's turn after release. While a swipe is dragged, the page follows the finger linearly |
+| `animationCurve` | `Curve` | `Curves.decelerate` | Curve of the part of a page turn that runs by itself: each turn of a navigation, and a swipe's turn after release. While a swipe is dragged, the page follows the finger through `dragCurve` |
+| `dragCurve` | `Curve` | `Curves.linear` | Maps a swipe's progress through the drag box to how far the page is turned while the finger is down. The default keeps the page under the finger; `Curves.decelerate` turns it ahead of the finger. Does not affect when a released swipe completes |
 | `pageTurnStyle` | `PageTurnStyle` | `PageTurnStyle()` | Style for the page curl effect |
 
 #### Gestures
