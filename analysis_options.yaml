@@ -7,6 +7,7 @@ linter:
     - avoid_empty_else
     - avoid_print
     - avoid_unnecessary_containers
+    - comment_references
     - prefer_const_constructors
     - prefer_const_constructors_in_immutables
     - prefer_const_declarations
@@ -15,7 +16,6 @@ linter:
     - sort_constructors_first
     - unnecessary_this
     - use_key_in_widget_constructors
-    - avoid_print: false
 
 analyzer:
   errors:
@@ -23,3 +23,4 @@ analyzer:
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
+    - build/**

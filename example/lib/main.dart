@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flip_calendar/flip_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:page_turn_animation/page_turn_animation.dart';
@@ -47,7 +49,7 @@ abstract final class ExampleColors {
   static const accent = Color(0xFFC85C51); // Rich muted red
   static const selectedDay = Color(0x33C85C51);
 
-  // Event dot colors (from label palette)
+  // Event dot colors
   static const eventRed = Color(0xFFC85C51);
   static const eventRose = Color(0xFFE8A594);
   static const eventGreen = Color(0xFF6A9E6A);
@@ -67,8 +69,8 @@ class SampleEvent {
   final Color color;
 }
 
-/// Returns some hard-coded events for the current month so the calendar
-/// isn't completely empty. Events are spread across a few days.
+/// Returns some hard-coded events by day of the month, shown on those days of
+/// every month so the calendar isn't completely empty.
 Map<int, List<SampleEvent>> _buildSampleEvents() {
   return {
     3: [
@@ -105,9 +107,13 @@ class CalendarExamplePage extends StatefulWidget {
 }
 
 class _CalendarExamplePageState extends State<CalendarExamplePage> {
+  /// The calendar's today, updated every minute, so the calendar moves to the
+  /// next day while the app is open.
+  final _clock = ValueNotifier<DateTime>(DateTime.now());
+  late final Timer _clockTimer;
   late final CalendarController _controller;
   DateTime? _selectedDate;
-  bool _isAnimating = false;
+  bool _isNavigating = false;
   PageTurnEdge _boundEdge = PageTurnEdge.top;
 
   final _sampleEvents = _buildSampleEvents();
@@ -115,7 +121,15 @@ class _CalendarExamplePageState extends State<CalendarExamplePage> {
   @override
   void initState() {
     super.initState();
-    _controller = CalendarController(initialMonth: DateTime.now());
+    _clockTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _clock.value = DateTime.now(),
+    );
+    _controller = CalendarController(
+      clock: _clock,
+      maxDate: DateConstraint.today(),
+      multiMonthAnimationMode: MultiMonthAnimationMode.directJump,
+    );
     _controller.addListener(_onCalendarChanged);
   }
 
@@ -123,35 +137,40 @@ class _CalendarExamplePageState extends State<CalendarExamplePage> {
   void dispose() {
     _controller.removeListener(_onCalendarChanged);
     _controller.dispose();
+    // The clock must outlive the controller.
+    _clockTimer.cancel();
+    _clock.dispose();
     super.dispose();
   }
 
   void _onCalendarChanged() {
-    final animating = _controller.isAnimating;
-    if (animating != _isAnimating) {
-      setState(() => _isAnimating = animating);
+    final navigating = _controller.isNavigating;
+    if (navigating != _isNavigating) {
+      setState(() => _isNavigating = navigating);
     }
   }
 
   void _onDayTapped(DateTime date) {
     setState(() => _selectedDate = date);
+    final current = _controller.currentMonth;
+    if (date.year != current.year || date.month != current.month) {
+      _controller.goToMonth(date);
+    }
   }
 
   // -- Header navigation ---------------------------------------------------
 
-  void _previousMonth() {
-    if (_isAnimating) return;
-    _controller.previousMonth();
-  }
-
-  void _nextMonth() {
-    if (_isAnimating) return;
-    _controller.nextMonth();
-  }
-
-  void _goToToday() {
-    if (_isAnimating) return;
+  /// Turns to today's month, then clears the selection once the page rests
+  /// there.
+  ///
+  /// A calendar turns its pages only while it is on screen, so this first
+  /// waits for it to be, as a host would for a calendar on another tab.
+  Future<void> _goToToday() async {
+    await _controller.whenShown();
+    if (!mounted) return;
     _controller.goToToday();
+    await _controller.whenAtRest();
+    if (!mounted) return;
     setState(() => _selectedDate = null);
   }
 
@@ -167,9 +186,9 @@ class _CalendarExamplePageState extends State<CalendarExamplePage> {
             children: [
               _CalendarHeader(
                 currentMonth: _controller.currentMonth,
-                enabled: !_isAnimating,
-                onPrevious: _previousMonth,
-                onNext: _nextMonth,
+                enabled: !_isNavigating,
+                onPrevious: _controller.previousMonth,
+                onNext: _controller.nextMonth,
                 onToday: _goToToday,
               ),
               Expanded(
@@ -189,10 +208,7 @@ class _CalendarExamplePageState extends State<CalendarExamplePage> {
                     controller: _controller,
                     selectedDate: _selectedDate,
                     onDayTap: _onDayTapped,
-                    maxDate: DateConstraint.today(),
                     boundEdge: _boundEdge,
-                    animationsEnabled: true,
-                    multiMonthAnimationMode: MultiMonthAnimationMode.directJump,
                     style: const CalendarStyle(
                       padding: EdgeInsets.all(20),
                       calendarBackground: ExampleColors.calendarBackground,

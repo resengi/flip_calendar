@@ -1,7 +1,7 @@
 name: flip_calendar
 
 description: A customizable calendar widget with page-turn animations
-  and swipe gesture   navigation.
+  and swipe gesture navigation.
 
 version: 0.1.2
 
@@ -11,7 +11,7 @@ issue_tracker: https://github.com/resengi/flip_calendar/issues
 
 environment:
   sdk: ^3.10.1
-  flutter: ">=3.27.0"
+  flutter: ">=3.41.0"
 
 dependencies:
   flutter:

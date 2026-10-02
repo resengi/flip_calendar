@@ -1,10 +1,10 @@
 name: flip_calendar_example
-description: Demonstrates the flip_calendar package with an simple UI.
+description: Demonstrates the flip_calendar package with a simple UI.
 publish_to: "none"
 
 environment:
   sdk: ^3.10.1
-  flutter: ">=3.27.0"
+  flutter: ">=3.41.0"
 
 dependencies:
   flutter:
