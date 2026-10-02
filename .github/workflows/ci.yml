@@ -33,3 +33,10 @@ jobs:
       - uses: actions/checkout@v4
       - run: flutter pub get
       - run: flutter test
+      - name: Test skipped local dates
+        env:
+          TZ: Pacific/Kiritimati
+        run: >-
+          flutter test
+          --dart-define=FLIP_CALENDAR_REQUIRE_SKIPPED_DATE=true
+          test/month_grid_test.dart

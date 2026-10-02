@@ -95,17 +95,19 @@ class _RelativeDateConstraint extends DateConstraint {
   DateTime resolve(DateTime today) {
     try {
       final (:year, :month) = normalizeYearMonth(
-        today.year + years,
-        today.month + months,
+        BigInt.from(today.year) + BigInt.from(years),
+        BigInt.from(today.month) + BigInt.from(months),
       );
-      return DateTime(
-        year,
-        month,
-        math.min(today.day, daysInMonth(year, month)) + days,
+      final cappedDay = math.min(
+        today.day,
+        daysInMonth((year % BigInt.from(400)).toInt(), month),
+      );
+      return localDateFromCivilFields(
+        year: year,
+        month: month,
+        day: BigInt.from(cappedDay) + BigInt.from(days),
       );
     } on ArgumentError {
-      // DateTime's constructor throws this, and only this, for a date
-      // outside its range.
       throw ArgumentError.value(
         this,
         'constraint',

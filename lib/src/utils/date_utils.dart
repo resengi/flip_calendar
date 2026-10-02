@@ -3,10 +3,9 @@
 /// None of these functions reads a clock: a rule that depends on today takes
 /// it as an argument.
 ///
-/// The dates they return are local dates built as
-/// `DateTime(year, month, day)`: midnight, except on a day whose midnight a
-/// daylight-saving change skips, where [DateTime] gives the first hour that
-/// exists.
+/// Dates returned by these utilities are local dates constructed from
+/// Gregorian year, month and day fields. Local timezone normalization
+/// follows DateTime, including skipped local dates and times.
 library;
 
 /// [date]'s calendar day, as a local date.
@@ -20,11 +19,6 @@ DateTime normalizeDate(DateTime date) {
 /// The first day of [date]'s month, as a local date.
 DateTime normalizeMonth(DateTime date) {
   return DateTime(date.year, date.month, 1);
-}
-
-/// The last day of [date]'s month, as a local date.
-DateTime lastDayOfMonth(DateTime date) {
-  return DateTime(date.year, date.month, daysInMonth(date.year, date.month));
 }
 
 /// Checks if two dates are the same day.
@@ -46,7 +40,7 @@ bool isSameMonth(DateTime a, DateTime b) {
 /// positive when [dateB]'s month is later, negative when it is earlier, and 0
 /// when both fall in the same month. Days are ignored.
 int monthsDelta(DateTime dateA, DateTime dateB) {
-  return (dateB.year - dateA.year) * 12 + (dateB.month - dateA.month);
+  return calendarMonthIndex(dateB) - calendarMonthIndex(dateA);
 }
 
 /// Checks if a date is selectable given optional min/max bounds (inclusive).
@@ -92,16 +86,66 @@ bool isSupportedCalendarMonthIndex(int index) {
 }
 
 /// Normalizes [month] into 1 to 12, carrying whole years into [year].
-({int year, int month}) normalizeYearMonth(int year, int month) {
-  final index = month - 1;
-  final monthIndex = index % 12;
-  return (year: year + (index - monthIndex) ~/ 12, month: monthIndex + 1);
+({BigInt year, int month}) normalizeYearMonth(
+  BigInt year,
+  BigInt month,
+) {
+  final index = month - BigInt.one;
+  final monthIndex = index % BigInt.from(12);
+  return (
+    year: year + (index - monthIndex) ~/ BigInt.from(12),
+    month: monthIndex.toInt() + 1,
+  );
+}
+
+/// Constructs a local date from Gregorian fields.
+///
+/// [month] must be in 1 to 12. [day] may overflow its month.
+/// Throws an [ArgumentError] when the resulting date is outside
+/// DateTime's range. Local timezone normalization follows DateTime.
+DateTime localDateFromCivilFields({
+  required BigInt year,
+  required int month,
+  required BigInt day,
+}) {
+  RangeError.checkValueInInterval(month, 1, 12, 'month');
+
+  final cycleLength = BigInt.from(400);
+  final cycleYear = year % cycleLength;
+  final cycles = (year - cycleYear) ~/ cycleLength;
+  final cycleStart = DateTime.utc(cycleYear.toInt(), month);
+  final dayIndex =
+      BigInt.from(
+        cycleStart.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay,
+      ) +
+      cycles * BigInt.from(146097) +
+      day -
+      BigInt.one;
+
+  final limit = BigInt.from(100000000);
+  if (dayIndex < -limit || dayIndex > limit) {
+    throw ArgumentError('Outside the dates DateTime supports');
+  }
+
+  // UTC decodes Gregorian fields; the returned date is constructed locally.
+  final civilDate = DateTime.fromMillisecondsSinceEpoch(
+    dayIndex.toInt() * Duration.millisecondsPerDay,
+    isUtc: true,
+  );
+  return DateTime(civilDate.year, civilDate.month, civilDate.day);
 }
 
 /// The first day of [index]'s month, as a local date.
 DateTime calendarMonthFromIndex(int index) {
-  final (:year, :month) = normalizeYearMonth(0, index + 1);
-  return DateTime(year, month);
+  final (:year, :month) = normalizeYearMonth(
+    BigInt.zero,
+    BigInt.from(index) + BigInt.one,
+  );
+  return localDateFromCivilFields(
+    year: year,
+    month: month,
+    day: BigInt.one,
+  );
 }
 
 /// The Gregorian day count of [month], from 1 to 12, in [year].

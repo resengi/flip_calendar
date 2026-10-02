@@ -118,11 +118,11 @@ class CalendarController extends ChangeNotifier {
   bool _notificationScheduled = false;
   bool _disposed = false;
 
-  /// The first day of the month the calendars rest on, as a local date.
+  /// The month the controller is on, as the first local day of that month.
   ///
-  /// Set when a navigation is accepted, so it can be read right after the
-  /// call: during a navigation it is already the month being turned to, while
-  /// the calendars still show the months on the way.
+  /// An accepted request sets it at once, so it can be read right after
+  /// the call. A swipe sets it only once it has landed; until then it is
+  /// the month the swipe started from.
   DateTime get currentMonth => _currentMonth;
 
   /// Today's date: the calendar day of the clock's value, or of the device
@@ -324,10 +324,12 @@ class CalendarController extends ChangeNotifier {
     RangeError.checkValueInInterval(month, 1, 12, 'month');
     final DateTime target;
     try {
-      target = DateTime(year, month);
+      target = localDateFromCivilFields(
+        year: BigInt.from(year),
+        month: month,
+        day: BigInt.one,
+      );
     } on ArgumentError {
-      // DateTime's constructor throws this, and only this, for a date
-      // outside its range.
       throw RangeError.value(
         year,
         'year',
@@ -349,6 +351,7 @@ class CalendarController extends ChangeNotifier {
   /// Removes [calendar], a joined calendar, from the calendars using this
   /// controller. It no longer owes any navigation; if it was the last
   /// calendar the navigation waited for, the navigation ends.
+  /// After disposal, leaving has no effect.
   @internal
   void calendarLeft(ControlledCalendar calendar) {
     _calendars.remove(calendar);
@@ -378,9 +381,10 @@ class CalendarController extends ChangeNotifier {
   ///
   /// [landed] is true for a swipe that reached its month: [currentMonth]
   /// becomes the last recorded page, and the other joined calendars owe the
-  /// navigation and show the recorded pages.
+  /// navigation and show the recorded pages. Ignored after disposal.
   @internal
   void calendarDone(ControlledCalendar calendar, {bool landed = false}) {
+    if (_disposed) return;
     _owing.remove(calendar);
     if (landed) {
       _owing.addAll(_calendars.where((joined) => joined != calendar));
@@ -410,10 +414,12 @@ class CalendarController extends ChangeNotifier {
 
   @override
   void dispose() {
+    assert(ChangeNotifier.debugAssertNotDisposed(this));
     _disposed = true;
     _clock?.removeListener(_onClockTick);
-    _atRest?.complete();
-    _atRest = null;
+    _calendars.clear();
+    _owing.clear();
+    _settle();
     _shown?.complete();
     _shown = null;
     super.dispose();

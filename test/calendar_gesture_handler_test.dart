@@ -47,6 +47,44 @@ final handler = find.byType(CalendarGestureHandler);
 
 void main() {
   group('CalendarGestureHandler', () {
+    testWidgets('a handler accepts a new drag after being re-enabled', (
+      tester,
+    ) async {
+      var enabled = true;
+      final begins = <DragDirection>[];
+
+      Widget subject() => Center(
+        child: SizedBox(
+          width: 300,
+          height: 400,
+          child: CalendarGestureHandler(
+            enabled: enabled,
+            boundEdge: PageTurnEdge.top,
+            style: const CalendarStyle(),
+            onDragBegin: begins.add,
+            onDragProgress: (_) {},
+            onDragComplete: (_) {},
+            child: const ColoredBox(color: Colors.blue),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(subject());
+      final first = await tester.startGesture(tester.getCenter(handler));
+      await first.moveBy(const Offset(0, -40));
+      expect(begins, [DragDirection.next]);
+
+      enabled = false;
+      await tester.pumpWidget(subject());
+      enabled = true;
+      await tester.pumpWidget(subject());
+      await first.up();
+
+      await tester.drag(handler, const Offset(0, -100));
+      expect(begins, [DragDirection.next, DragDirection.next]);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     group('renders child', () {
       testWidgets('shows its child', (tester) async {
         await pumpHandler(

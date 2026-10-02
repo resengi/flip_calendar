@@ -152,6 +152,10 @@ class _CalendarExamplePageState extends State<CalendarExamplePage> {
 
   void _onDayTapped(DateTime date) {
     setState(() => _selectedDate = date);
+    final current = _controller.currentMonth;
+    if (date.year != current.year || date.month != current.month) {
+      _controller.goToMonth(date);
+    }
   }
 
   // -- Header navigation ---------------------------------------------------

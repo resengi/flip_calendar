@@ -26,10 +26,9 @@ class MonthGrid {
       );
     }
     final firstOfMonth = normalizeMonth(month);
-    final lastOfMonth = lastDayOfMonth(month);
 
     final offset = weekdayOffset(firstOfMonth.weekday, firstDayOfWeek);
-    final cellsToLastDay = offset + lastOfMonth.day;
+    final cellsToLastDay = offset + daysInMonth(month.year, month.month);
     final rows = (cellsToLastDay / 7).ceil();
 
     final startDate = DateTime(

@@ -714,8 +714,8 @@ void main() {
         var notifications = 0;
         controller.addListener(() => notifications++);
 
-        // Beyond the 6-month jump limit, so the only page recorded is the
-        // landing month itself, normalized from the request.
+        // With no calendar using the controller, the month changes at once to
+        // the landing month, normalized from the request.
         controller.goToMonth(DateTime(2025, 6, 15, 10));
 
         expect(controller.currentMonth, equals(DateTime(2025, 6, 1)));

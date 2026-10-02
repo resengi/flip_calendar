@@ -79,7 +79,8 @@ void main() {
 
   group('Programmatic navigation blocks gestures', () {
     testWidgets(
-      'gesture during programmatic navigation does not cause extra advance',
+      'a fling during a programmatic page turn leaves the destination '
+      'unchanged',
       (tester) async {
         await tester.pumpWidget(buildCalendar());
         await tester.pumpAndSettle();
@@ -101,13 +102,10 @@ void main() {
         await tester.pumpAndSettle();
 
         // Should be July (from programmatic navigation), not August.
-        // The controller already holds July regardless of capture.
         expect(
           controller.currentMonth,
           equals(DateTime(2024, 7, 1)),
-          reason:
-              'Gesture during programmatic animation should not '
-              'cause an additional month advance.',
+          reason: 'A fling during a programmatic page turn is ignored.',
         );
         // The calendar ignores the fling: it starts no swipe, so it sends no
         // haptic either (a swipe started while busy would be restricted).

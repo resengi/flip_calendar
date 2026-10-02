@@ -105,6 +105,91 @@ void main() {
       return SizedBox(width: 300, height: 400, child: child);
     }
 
+    testWidgets('a backward turn captures completed future content', (
+      tester,
+    ) async {
+      final animated = createController(animationsEnabled: true);
+      final ready = Future<String>.value('ready');
+
+      Widget futureCell(BuildContext context, CalendarDayData data) {
+        return FutureBuilder<String>(
+          future: ready,
+          builder: (context, snapshot) => ColoredBox(
+            color: snapshot.hasData
+                ? const Color(0xFF00FF00)
+                : const Color(0xFFFF00FF),
+            child: const SizedBox.expand(),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(
+        app(page(calendar(
+          calendarController: animated,
+          dayBuilder: futureCell,
+        ))),
+      );
+      await tester.pumpAndSettle();
+
+      animated.previousMonth();
+      await tester.pump(); // Preparation.
+      await tester.pump(); // Capture.
+      await tester.pump(); // First animating frame.
+
+      final turn = tester.widget<PageTurnAnimation>(
+        find.byType(PageTurnAnimation),
+      );
+      final pixels = await tester.runAsync(
+        () => turn.image.toByteData(format: ui.ImageByteFormat.rawRgba),
+      );
+      expect(pixels, isNotNull);
+
+      final data = pixels!;
+      final bytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+      var readyPixels = 0;
+      var waitingPixels = 0;
+      for (var i = 0; i < bytes.length; i += 4) {
+        if (bytes[i] == 0 && bytes[i + 1] == 255 &&
+            bytes[i + 2] == 0 && bytes[i + 3] == 255) {
+          readyPixels++;
+        }
+        if (bytes[i] == 255 && bytes[i + 1] == 0 &&
+            bytes[i + 2] == 255 && bytes[i + 3] == 255) {
+          waitingPixels++;
+        }
+      }
+      expect(readyPixels, greaterThan(0));
+      expect(waitingPixels, 0);
+
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a disposed controller ignores a pending landed report', (
+      tester,
+    ) async {
+      await tester.pumpWidget(app(page(calendar())));
+      await tester.drag(
+        find.byType(FlipCalendar),
+        const Offset(0, -200),
+      );
+      expect(controller.isNavigating, isTrue);
+
+      controllers.remove(controller);
+      controller.dispose();
+
+      // The calendar remains attached while its scheduled report runs.
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(controller.isNavigating, isFalse);
+      expect(controller.calendarPages, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets("the grid shows June's first and last day", (tester) async {
       await tester.pumpWidget(app(page(calendar())));
 
@@ -2343,7 +2428,7 @@ void main() {
 
         animated.nextMonth();
         await tester.pump();
-        // The capture frame: only the page turned from is built, and captured.
+        // The outgoing page is captured; the incoming page is mounted offstage.
         expect(find.byKey(const Key('7-1')), findsNothing);
         await tester.pump(const Duration(milliseconds: 100));
 
@@ -2364,19 +2449,11 @@ void main() {
 
         animated.previousMonth();
         await tester.pump();
-        // The capture frame: the page turned to is captured, under the page
-        // shown, so it has the capture's RepaintBoundary as well.
-        int boundariesAround(String key) {
-          return find
-              .ancestor(
-                of: find.byKey(Key(key)),
-                matching: find.byType(RepaintBoundary),
-              )
-              .evaluate()
-              .length;
-        }
-
-        expect(boundariesAround('5-1'), boundariesAround('6-1') + 1);
+        // The preparation frame: the page turned to is built under the page
+        // shown.
+        expect(find.byKey(const Key('5-1')), findsOneWidget);
+        expect(find.byKey(const Key('6-1')), findsOneWidget);
+        await tester.pump(); // The capture frame.
         await tester.pump(const Duration(milliseconds: 100));
 
         final turn = tester.widget<PageTurnAnimation>(
@@ -2500,7 +2577,7 @@ void main() {
         );
         bool? mayShownAtRest;
 
-        // Backward, so May is built only once the turn has ended.
+        // The backward turn finishes with May as the live shown page.
         animated.previousMonth();
         animated.whenAtRest().then(
           (_) => mayShownAtRest = find

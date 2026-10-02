@@ -166,9 +166,13 @@ class CalendarStyle {
 
   // -- Animation --
 
-  /// Duration of the page-turn animation. A navigation that turns several
-  /// pages divides it equally among them, rounded down to the microsecond.
-  /// Must not be negative.
+  /// A programmatic navigation reads this duration when it starts and divides
+  /// it equally among its page turns, rounded down to microseconds. A swipe
+  /// reads it when it starts and uses it for its release animation. Updating
+  /// it during either operation affects the next operation. Controller animation
+  /// settings are recorded when a request is accepted or a swipe starts. Other
+  /// widget styling is read by the rendering and animation paths. Must not be
+  /// negative.
   final Duration animationDuration;
 
   /// Easing curve for the part of a page turn that runs by itself: each turn
@@ -184,8 +188,8 @@ class CalendarStyle {
 
   /// With [flickMaxDuration], sets the flick speed: this fraction of the
   /// calendar's size along the swipe axis per [flickMaxDuration]. A release
-  /// faster than that speed, that has also moved more than Flutter's touch
-  /// slop just before it, is a flick: in the swipe's direction it completes
+  /// faster than that speed, that passes Flutter's minimum fling distance
+  /// for the pointer device, is a flick: in the swipe's direction it completes
   /// the swipe whatever its progress, and against it it does not. Must be
   /// finite and greater than 0.
   final double flickDistanceThreshold;

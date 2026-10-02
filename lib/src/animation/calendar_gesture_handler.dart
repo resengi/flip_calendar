@@ -7,33 +7,26 @@ import '../style/calendar_style.dart';
 /// Direction of a drag gesture relative to month navigation.
 enum DragDirection { next, previous }
 
-/// Turns one-finger drags on [child] along the swipe axis into a swipe's
-/// begin, progress and end.
+/// Turns one-pointer drags on [child] into begin, progress and end reports.
 ///
-/// The top and bottom edges take vertical drags, the left and right edges
-/// horizontal ones. A drag follows the pointer that started it; other
-/// pointers are ignored until it lifts. The drag begins on its first move
-/// along the axis, whose direction is the drag's ([onDragBegin]). Each move
-/// along the axis, the first included, reports the drag's progress
-/// ([onDragProgress]): the distance the finger has moved along the axis since
-/// it went down, in this widget's coordinates and in the drag's direction,
-/// over [CalendarStyle.dragBoxSizePercentage] of this widget's size along the
-/// axis, from 0 to 1. Back past the start it is 0.
+/// Top and bottom bindings use the vertical axis; left and right bindings
+/// use the horizontal axis. The starting pointer is followed until it ends.
+/// A drag begins after Flutter accepts it and its drag threshold is crossed.
+/// Its direction is the net movement along the axis in the first delivered
+/// update. Progress is reported from that update onward and includes movement
+/// from pointer down, measured in this widget's coordinates. Progress is 0 to
+/// 1 over [CalendarStyle.dragBoxSizePercentage] of the axis size; movement
+/// back past the start gives 0.
 ///
-/// A drag that began reports one end ([onDragComplete]); a tap, or a move
-/// only across the axis, reports nothing. A flick in the drag's direction
-/// completes it and a flick against it does not; without a flick, it
-/// completes when its progress is at least
-/// [CalendarStyle.dragProgressThreshold]. A flick is a release that Flutter's
-/// fling filter accepts, with its minimum speed set to
-/// [CalendarStyle.flickDistanceThreshold] of this widget's size along the
-/// axis per [CalendarStyle.flickMaxDuration], and its standard minimum
-/// distance (the touch slop, for a finger).
+/// A begun drag reports one end on release or pointer cancellation. A flick
+/// in its direction completes it; an opposite flick cancels it. Other
+/// releases complete at [CalendarStyle.dragProgressThreshold]. Flutter's
+/// fling filter uses the configured speed and its minimum distance for the
+/// pointer device.
 ///
-/// A cancelled pointer ends the drag without completing it. When this widget
-/// has no size along the axis, the drag ends without completing once that
-/// frame is done; when [boundEdge] changes, it is dropped without an end. In
-/// both cases the rest of the drag is ignored.
+/// Changing [enabled] or [boundEdge] drops the current drag without an end.
+/// Collapsing to zero size along the axis ends it without completing after
+/// the frame. Dropped movement is ignored until a new pointer begins.
 class CalendarGestureHandler extends StatefulWidget {
   const CalendarGestureHandler({
     required this.child,
@@ -42,8 +35,13 @@ class CalendarGestureHandler extends StatefulWidget {
     required this.onDragProgress,
     required this.onDragComplete,
     required this.style,
+    this.enabled = true,
     super.key,
   });
+
+  /// Whether this handler recognizes drags. Changing it drops the
+  /// current drag without reporting an end.
+  final bool enabled;
 
   /// The widget the drags are made on.
   final Widget child;
@@ -72,17 +70,15 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
   /// This widget's size along the swipe axis, from its last layout.
   double _extent = 0;
 
-  /// The sign of the drag's direction along the axis, taken from its first
-  /// move along the axis: 0 while no drag has begun.
+  /// The sign of the first delivered axis update, or 0 when no drag is active.
   double _sign = 0;
 
   /// The distance moved along the axis since the pointer went down, in this
   /// widget's coordinates.
   double _moved = 0;
 
-  /// Whether the rest of the current pointer's drag is ignored: set when the
-  /// handler collapses to no size along the axis or its bound edge changes,
-  /// cleared when the next pointer goes down.
+  /// Whether updates are ignored after a drag is dropped or its axis has
+  /// no size. A new pointer-down clears this flag.
   bool _ignoring = false;
 
   /// The drag's progress: the distance moved in its direction over the drag
@@ -147,9 +143,8 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
   @override
   void didUpdateWidget(CalendarGestureHandler oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // A drag toward one edge means nothing toward another. The calendar ends
-    // its swipe itself, so the rest of the drag is ignored without an end.
-    if (widget.boundEdge != oldWidget.boundEdge) {
+    if (widget.boundEdge != oldWidget.boundEdge ||
+        widget.enabled != oldWidget.enabled) {
       _sign = 0;
       _ignoring = true;
     }
@@ -179,6 +174,7 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
         void configure(DragGestureRecognizer recognizer) {
           recognizer
             ..gestureSettings = gestureSettings
+            ..onlyAcceptDragOnThreshold = true
             // The movement made before the drag is accepted arrives as its
             // first update.
             ..dragStartBehavior = DragStartBehavior.down
@@ -193,7 +189,7 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
         return RawGestureDetector(
           behavior: HitTestBehavior.translucent,
           gestures: {
-            if (vertical)
+            if (widget.enabled && vertical)
               _VerticalSwipeRecognizer:
                   GestureRecognizerFactoryWithHandlers<
                     _VerticalSwipeRecognizer
@@ -204,7 +200,7 @@ class _CalendarGestureHandlerState extends State<CalendarGestureHandler> {
                     ),
                     configure,
                   )
-            else
+            else if (widget.enabled)
               _HorizontalSwipeRecognizer:
                   GestureRecognizerFactoryWithHandlers<
                     _HorizontalSwipeRecognizer

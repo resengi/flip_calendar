@@ -67,6 +67,26 @@ class FlipCalendar extends StatefulWidget {
 
   /// Builder for each day cell. Receives [CalendarDayData] with all
   /// information needed to render the cell.
+  ///
+  /// A month's day cells retain their state while that page remains part of a
+  /// turn, subject to Flutter's ordinary widget type and key rules. A
+  /// discarded page is disposed; returning to that month builds a fresh page.
+  /// During an animated turn both month pages are mounted, including the page
+  /// kept offstage. Dates shared by their grids can therefore be built twice.
+  ///
+  /// To avoid attaching the same `GlobalKey` on both pages, attach it only to
+  /// the cell whose `data.isCurrentMonth` is true. This also applies to a key
+  /// on the selected cell used to anchor a popup: `data.isSelected` alone
+  /// does not identify one page. Keys must still be unique throughout the
+  /// widget tree, including across separate calendars.
+  ///
+  /// The turning page is a still image. A forward turn captures the outgoing
+  /// page as it is on screen when the turn starts. A backward turn captures
+  /// the incoming page one frame after it is first built. The image does not
+  /// reflect later updates. The underneath page can update during a forward
+  /// turn; the incoming page in a backward turn becomes visible as a live
+  /// page when the turn ends. To include asynchronous data in the turning
+  /// image, load the months returned by `monthsOnWayTo` before navigating.
   final Widget Function(BuildContext context, CalendarDayData data) dayBuilder;
 
   /// The currently selected date (matching cell gets `isSelected: true`).
@@ -112,9 +132,8 @@ class _FlipCalendarState extends State<FlipCalendar>
   /// follows the style's curve from wherever the page is.
   late final AnimationController _flipController;
 
-  /// The key of the page captured for the turn: the page turned from for a
-  /// forward turn, the page turned to for a backward one.
-  final GlobalKey _captureKey = GlobalKey();
+  /// Capture boundaries for the month pages in the current turn.
+  final Map<int, GlobalKey> _pageKeys = {};
 
   /// The captured page; set exactly while animating.
   ui.Image? _image;
@@ -143,7 +162,7 @@ class _FlipCalendarState extends State<FlipCalendar>
   /// The page shown at rest, and the page turned from during a flip.
   late DateTime _shownMonth;
 
-  /// The controller's month at its last notification.
+  /// The controller month incorporated into this calendar's navigation state.
   late DateTime _controllerMonth;
 
   /// The month the page turn in progress, or the swipe, turns to: for a
@@ -152,6 +171,10 @@ class _FlipCalendarState extends State<FlipCalendar>
   /// Set until the calendar goes idle, also during a swipe with
   /// animations off, when the phase stays idle.
   DateTime? _targetMonth;
+
+  /// The page represented by the turning image.
+  DateTime get _capturedMonth =>
+      _isForward ? _shownMonth : _targetMonth!;
 
   /// The pages of a sequential navigation still to turn to after
   /// [_targetMonth].
@@ -179,7 +202,7 @@ class _FlipCalendarState extends State<FlipCalendar>
   @override
   void initState() {
     super.initState();
-    // Each page turn sets its duration when it is prepared.
+    // Navigation start or swipe start sets the duration.
     _flipController = AnimationController(vsync: this)
       ..addStatusListener(_onFlipStatus);
     _shownMonth = widget.controller.currentMonth;
@@ -211,8 +234,8 @@ class _FlipCalendarState extends State<FlipCalendar>
     } else if (!widget.gesturesEnabled ||
         widget.boundEdge != oldWidget.boundEdge ||
         _inputError() != null) {
-      // The drag's gesture handler goes away, or reads its drags another
-      // way: an active swipe ends without moving.
+      // Disabling gestures, changing the bound edge, or invalidating inputs
+      // ends an active swipe without moving.
       _onDragComplete(false);
     }
   }
@@ -279,9 +302,38 @@ class _FlipCalendarState extends State<FlipCalendar>
     _phase = _Phase.capturing;
     _paintsBeforeCapture = _paintCount;
     _requestProbePaint();
+
     final generation = _flipGeneration;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (_flipGeneration == generation) _onCaptureFrameDrawn();
+    final prepareIncoming =
+        !_isForward && !isSameMonth(target, _shownMonth);
+    final scheduler = SchedulerBinding.instance;
+
+    scheduler.addPostFrameCallback((_) {
+      if (_flipGeneration != generation ||
+          _phase != _Phase.capturing) {
+        return;
+      }
+
+      if (!prepareIncoming) {
+        _onCaptureFrameDrawn();
+        return;
+      }
+
+      if (!_isOnScreenSince(_paintsBeforeCapture)) {
+        _endAndReport(reportNow: true);
+        return;
+      }
+
+      _paintsBeforeCapture = _paintCount;
+      _requestProbePaint();
+
+      scheduler.addPostFrameCallback((_) {
+        if (_flipGeneration == generation &&
+            _phase == _Phase.capturing) {
+          _onCaptureFrameDrawn();
+        }
+      });
+      scheduler.scheduleFrame();
     });
   }
 
@@ -302,11 +354,11 @@ class _FlipCalendarState extends State<FlipCalendar>
     }
   }
 
-  /// Captures the page that turns; false if it was not built in the capture
-  /// frame (its redraw failed), has no size, or the capture throws. A capture
-  /// that throws is reported.
+  /// Captures the prepared turning page. Returns false if its boundary
+  /// is unavailable, has no size, or capture throws. Capture errors are reported.
   bool _captureImage() {
-    final captureContext = _captureKey.currentContext;
+    final captureContext =
+        _pageKeys[calendarMonthIndex(_capturedMonth)]?.currentContext;
     if (captureContext == null) return false;
     final page = captureContext.findRenderObject()! as RenderRepaintBoundary;
     if (page.size.isEmpty) return false;
@@ -466,7 +518,6 @@ class _FlipCalendarState extends State<FlipCalendar>
         !_isRestricted &&
         widget.controller.canGoTo(_targetMonth!);
     _pendingGestureResult = lands;
-    setState(() {});
     switch (_phase) {
       case _Phase.animating:
         _runFlip(forward: lands);
@@ -482,6 +533,9 @@ class _FlipCalendarState extends State<FlipCalendar>
   // ---------------------------------------------------------------------------
 
   void _report({bool landed = false}) {
+    if (landed) {
+      _controllerMonth = _shownMonth;
+    }
     widget.controller.calendarDone(this, landed: landed);
   }
 
@@ -495,9 +549,7 @@ class _FlipCalendarState extends State<FlipCalendar>
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (_flipGeneration != generation) return;
       if (landed && !widget.controller.canGoTo(_shownMonth)) {
-        _shownMonth = widget.controller.currentMonth;
-        _report();
-        setState(() {});
+        _endAndReport(reportNow: false);
         return;
       }
       _report(landed: landed);
@@ -581,18 +633,20 @@ class _FlipCalendarState extends State<FlipCalendar>
       );
     }
 
-    var content = _buildForPhase(buildPage);
-    if (widget.gesturesEnabled) {
-      content = CalendarGestureHandler(
-        boundEdge: widget.boundEdge,
-        style: widget.style,
-        onDragBegin: _onDragBegin,
-        onDragProgress: _onDragProgress,
-        onDragComplete: _onDragComplete,
-        child: content,
-      );
-    }
-    return _OnScreenProbe(onPaint: _onProbePaint, child: content);
+    final content = CalendarGestureHandler(
+      enabled: widget.gesturesEnabled,
+      boundEdge: widget.boundEdge,
+      style: widget.style,
+      onDragBegin: _onDragBegin,
+      onDragProgress: _onDragProgress,
+      onDragComplete: _onDragComplete,
+      child: _buildForPhase(buildPage),
+    );
+
+    return _OnScreenProbe(
+      onPaint: _onProbePaint,
+      child: content,
+    );
   }
 
   /// The error for the first input that is out of range,
@@ -668,66 +722,87 @@ class _FlipCalendarState extends State<FlipCalendar>
   }
 
   Widget _buildForPhase(Widget Function(DateTime month) buildPage) {
-    switch (_phase) {
-      case _Phase.capturing:
-        final captured = RepaintBoundary(
-          key: _captureKey,
-          child: buildPage(_isForward ? _shownMonth : _targetMonth!),
-        );
-        if (_isForward) return captured;
-        // The page turned to is captured under the page shown.
-        return Stack(
-          children: [
-            Positioned.fill(child: captured),
-            Positioned.fill(child: buildPage(_shownMonth)),
-          ],
-        );
+    final hasDistinctTarget =
+        _phase != _Phase.idle &&
+        !isSameMonth(_targetMonth!, _shownMonth);
 
-      case _Phase.animating:
-        return _buildPageFlip(
-          underneath: buildPage(_isForward ? _targetMonth! : _shownMonth),
-          image: _image!,
-          animation: _flipController,
-          isForward: _isForward,
-          boundEdge: widget.boundEdge,
-          pageTurnStyle: widget.style.pageTurnStyle,
-        );
+    final months = <DateTime>[
+      if (hasDistinctTarget) _targetMonth!,
+      _shownMonth,
+    ];
 
-      case _Phase.idle:
-        return buildPage(_shownMonth);
-    }
+    final activeIndices = months.map(calendarMonthIndex).toSet();
+    _pageKeys.removeWhere(
+      (index, _) => !activeIndices.contains(index),
+    );
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (final month in months)
+          _buildMonthPage(
+            month,
+            hasDistinctTarget: hasDistinctTarget,
+            buildPage: buildPage,
+          ),
+        if (_phase == _Phase.animating)
+          PageTurnAnimation(
+            image: _image!,
+            animation: _flipController,
+            direction: _isForward
+                ? PageTurnDirection.forward
+                : PageTurnDirection.backward,
+            edge: widget.boundEdge,
+            style: widget.style.pageTurnStyle,
+          ),
+      ],
+    );
   }
-}
 
-/// Builds a page turn: [image], the captured page that turns, over the live
-/// [underneath] page. Forward, [image] is the page turned from and curls
-/// away from the page turned to; backward, it is the page turned to and
-/// curls in over the page turned from.
-///
-/// [animation] drives the turn from [boundEdge], and [pageTurnStyle] styles
-/// the curl.
-Widget _buildPageFlip({
-  required Widget underneath,
-  required ui.Image image,
-  required Animation<double> animation,
-  required bool isForward,
-  required PageTurnEdge boundEdge,
-  required PageTurnStyle pageTurnStyle,
-}) {
-  return Stack(
-    children: [
-      Positioned.fill(child: underneath),
-      PageTurnAnimation(
-        image: image,
-        animation: animation,
-        direction: isForward
-            ? PageTurnDirection.forward
-            : PageTurnDirection.backward,
-        edge: boundEdge,
-        style: pageTurnStyle,
+  Widget _buildMonthPage(
+    DateTime month, {
+    required bool hasDistinctTarget,
+    required Widget Function(DateTime month) buildPage,
+  }) {
+    final index = calendarMonthIndex(month);
+    final boundaryKey = _pageKeys.putIfAbsent(
+      index,
+      () => GlobalKey(),
+    );
+    final isShown = isSameMonth(month, _shownMonth);
+
+    final bool offstage;
+    switch (_phase) {
+      case _Phase.idle:
+        offstage = false;
+      case _Phase.capturing:
+        // Forward: prepare the incoming page without painting it.
+        // Backward: paint it below the shown page for capture.
+        offstage = _isForward && !isShown;
+      case _Phase.animating:
+        offstage =
+            hasDistinctTarget && isSameMonth(month, _capturedMonth);
+    }
+
+    final inactive = _phase == _Phase.animating || !isShown;
+
+    return Positioned.fill(
+      key: ValueKey<int>(index),
+      child: Offstage(
+        offstage: offstage,
+        child: IgnorePointer(
+          ignoring: inactive,
+          child: ExcludeSemantics(
+            excluding: inactive,
+            child: RepaintBoundary(
+              key: boundaryKey,
+              child: buildPage(month),
+            ),
+          ),
+        ),
       ),
-    ],
-  );
+    );
+  }
 }
 
 /// A [RangeError] naming [name] unless [value] is greater than 0 and finite;

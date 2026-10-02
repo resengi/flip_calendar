@@ -3,6 +3,27 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('MonthGrid', () {
+    test('December 1994 uses its Gregorian day count', () {
+      final grid = MonthGrid.forMonth(
+        DateTime(1994, 12),
+        firstDayOfWeek: DateTime.sunday,
+      );
+      expect(grid.rows, 5);
+      expect(grid.totalCells, 35);
+    });
+
+    const requireSkippedDate = bool.fromEnvironment(
+      'FLIP_CALENDAR_REQUIRE_SKIPPED_DATE',
+    );
+    if (requireSkippedDate) {
+      test('the timezone fixture skips December 31, 1994', () {
+        final skipped = DateTime(1994, 12, 31);
+        expect(skipped.year, 1995);
+        expect(skipped.month, DateTime.january);
+        expect(skipped.day, 1);
+      });
+    }
+
     group('forMonth with Sunday start', () {
       test('a month starting on Sunday begins the grid on its 1st', () {
         // September 2024 starts on Sunday

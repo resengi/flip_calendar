@@ -41,36 +41,6 @@ void main() {
       });
     });
 
-    group('lastDayOfMonth', () {
-      test('February has 29 days in a leap year', () {
-        expect(
-          lastDayOfMonth(DateTime(2024, 2, 10)),
-          equals(DateTime(2024, 2, 29)),
-        );
-      });
-
-      test('February has 28 days in a common year', () {
-        expect(
-          lastDayOfMonth(DateTime(2026, 2, 10)),
-          equals(DateTime(2026, 2, 28)),
-        );
-      });
-
-      test('December ends on the 31st of the same year', () {
-        expect(
-          lastDayOfMonth(DateTime(2024, 12, 1)),
-          equals(DateTime(2024, 12, 31)),
-        );
-      });
-
-      test('a date with a time gives the last day at midnight', () {
-        expect(
-          lastDayOfMonth(DateTime(2024, 6, 15, 14, 30)),
-          equals(DateTime(2024, 6, 30)),
-        );
-      });
-    });
-
     group('isSameDay', () {
       test('returns true for same date with different times', () {
         expect(

@@ -126,24 +126,25 @@ controller.addListener(() {
 });
 
 // Programmatic navigation
-controller.nextMonth();
 controller.previousMonth();
+controller.nextMonth();
 controller.goToMonth(DateTime(2025, 12, 1));
 controller.goToToday();
 controller.goToYearMonth(2026, 3);
 ```
 
-**One navigation at a time.** While a calendar plays a navigation, `isNavigating` is true and every other request is ignored: nothing changes and nothing is notified. In the snippet above, with a calendar using the controller, only `nextMonth()` is accepted. To make several moves, wait for each to end with `whenAtRest()`:
+**One navigation at a time.** While a calendar plays a navigation, `isNavigating` is true and every other request is ignored: nothing changes and nothing is notified. In the snippet above, with a calendar using the controller, `previousMonth()` starts the navigation and the following requests are ignored while it remains busy. To make several moves, wait for each to end with `whenAtRest()`:
 
 ```dart
-controller.nextMonth();
+controller.previousMonth();
 await controller.whenAtRest();
-controller.goToMonth(DateTime(2025, 12, 1));
+controller.goToToday();
+await controller.whenAtRest();
 ```
 
 `whenAtRest()` completes at once when no navigation is in progress. A swipe is a navigation too: `isNavigating` turns on when a drag begins, and a request made during the drag is ignored.
 
-**Where a request lands.** `currentMonth` is the first day of the month the calendar rests on. An accepted request sets it at once, so it can be read right after the call, while the calendar still turns the pages on the way. A request for a month with no allowed day lands on the allowed month nearest the target, among the allowed months in the request's direction; if there is none, or it would land on the current month, nothing happens. With no calendar using the controller, an accepted request still changes the month, and the controller never becomes busy.
+**Where a request lands.** `currentMonth` is the month the controller is on, as the first local day of that month. An accepted request sets it at once, so it can be read right after the call. A swipe sets it only once it has landed; until then it is the month the swipe started from. A request for a month with no allowed day lands on the allowed month nearest the target, among the allowed months in the request's direction; if there is none, or it would land on the current month, nothing happens. With no calendar using the controller, an accepted request still changes the month, and the controller never becomes busy.
 
 **Notifications.** Listeners are notified when `currentMonth`, the bounds, the animation settings or `isNavigating` change, and, with a clock, when the day of `today` changes; setting a value to what it already is notifies nothing. A change made while Flutter builds, lays out or paints a frame is announced after that frame.
 
@@ -156,6 +157,23 @@ controller.goToMonth(DateTime(2025, 12, 1));
 Any number of calendars can use one controller, and a calendar can switch to another controller at any time; it then moves to the new controller's month at once. Every calendar plays each navigation, and `isNavigating` stays on until all of them have shown the result. A calendar that is removed stops counting. When one calendar is swiped to a new month, the others turn to it after the swipe's page turn. Calendars on one controller share its animation settings, but can differ in style, `boundEdge` and `gesturesEnabled`.
 
 ### Day Builder
+
+A month's day cells retain their state while that page remains part of a turn, subject to Flutter's ordinary widget type and key rules. A discarded page is disposed; returning to that month builds a fresh page. During an animated turn both month pages are mounted, including the page kept offstage. Dates shared by their grids can therefore be built twice.
+
+To avoid attaching the same `GlobalKey` on both pages, attach it only to the cell whose `data.isCurrentMonth` is true. This also applies to a key on the selected cell used to anchor a popup: `data.isSelected` alone does not identify one page. Keys must still be unique throughout the widget tree, including across separate calendars.
+
+The turning page is a still image. A forward turn captures the outgoing page as it is on screen when the turn starts. A backward turn captures the incoming page one frame after it is first built. The image does not reflect later updates. The underneath page can update during a forward turn; the incoming page in a backward turn becomes visible as a live page when the turn ends. To include asynchronous data in the turning image, load the months returned by `monthsOnWayTo` before navigating.
+
+```dart
+return MyDayCell(
+  key: data.isCurrentMonth && data.isSelected
+      ? selectedCellKey
+      : null,
+  data: data,
+);
+```
+
+Here `selectedCellKey` belongs to this calendar. Ordinary Flutter uniqueness requirements also apply to the consumer's other widgets.
 
 The `dayBuilder` callback receives a `CalendarDayData` object with everything you need to render each cell:
 
@@ -283,9 +301,9 @@ FlipCalendar(
 
 ### Swipes
 
-- A swipe follows the finger that started it; other fingers are ignored until it lifts. Its direction is the direction of its first move along the swipe axis.
+- A swipe follows the finger that started it; other fingers are ignored until it lifts. Its direction is the net movement along the swipe axis when the drag threshold is crossed.
 - While the finger moves, the page follows it: the distance moved along the axis, over `dragBoxSizePercentage` of the calendar's size along the axis. Moving back past the start leaves the page flat; a swipe never turns the other way.
-- On release, a flick in the swipe's direction completes it and a flick against it does not. Without a flick, the swipe completes when the page is turned at least `dragProgressThreshold` of the way. A flick is a release faster than `flickDistanceThreshold` of the calendar's size along the axis per `flickMaxDuration`, that has also moved more than Flutter's touch slop just before it.
+- On release, a flick in the swipe's direction completes it and a flick against it does not. Without a flick, the swipe completes when the page is turned at least `dragProgressThreshold` of the way. A flick is a release faster than `flickDistanceThreshold` of the calendar's size along the axis per `flickMaxDuration`, that passes Flutter's minimum fling distance for the pointer device.
 - A swipe that does not complete turns the page back, and the month does not change. A cancelled pointer, the calendar collapsing to no size, a change of `boundEdge`, turning `gesturesEnabled` off, or an input that fails its check (see [Validation](#validation)) ends a swipe the same way.
 - A swipe toward a month outside the bounds, with no allowed month beyond it in that direction, cannot land: the page lifts slightly and turns back, and `onHapticFeedback` is called once with `CalendarHapticType.navigationRestricted` when the swipe starts. With animations off, only the haptic happens.
 - A swipe out of a month that is outside the bounds, toward the allowed range, turns straight to the nearest allowed month in one page turn.
@@ -310,7 +328,7 @@ controller.multiMonthAnimationMode = MultiMonthAnimationMode.directJump;
 | `sequential` | One page turn per month moved, if the request moves at most `maxAnimatedMonthJump` months; otherwise the month changes without a page turn. With a `maxAnimatedMonthJump` of 0, even a one-month move changes without a page turn. |
 | `directJump` | One page turn from the current month to the target, whatever the distance. Ignores `maxAnimatedMonthJump`. |
 
-A sequential navigation divides `animationDuration` equally among its page turns. A change to any animation setting during a navigation applies from the next one.
+A programmatic navigation reads `animationDuration` when it starts and divides it equally among its page turns, rounded down to microseconds. A swipe reads it when the swipe starts and uses it for its release animation. Updating the duration during either operation affects the next operation. Controller animation settings are recorded when a request is accepted or a swipe starts. Other widget styling is read by the existing rendering and animation paths.
 
 ### First Day of Week
 
@@ -616,7 +634,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 }
 ```
 
-Because `currentMonth` changes when a navigation is accepted, the title shows the new month while the pages turn to it.
+An accepted request changes `currentMonth` at once, so the title updates while the pages turn. During a swipe the title keeps the starting month until the swipe lands.
 
 ## API Reference
 
@@ -658,7 +676,7 @@ CalendarController({
 
 | Property/Method | Description |
 |----------------|-------------|
-| `currentMonth` | The first day of the month the calendars rest on; set when a navigation is accepted |
+| `currentMonth` | The month the controller is on, as its first local day; an accepted request sets it at once, and a swipe sets it only once it has landed |
 | `today` | Today's date, from the clock or the device clock |
 | `minDate` / `maxDate` | The bounds; set with `setBounds` |
 | `setBounds(min, max)` | Replaces both bounds |
