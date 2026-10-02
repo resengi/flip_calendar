@@ -1,5 +1,35 @@
 # Change Log
 
+
+
+## 2026-10-02
+
+### Changes
+
+---
+
+Packages with breaking changes:
+
+ - [`flip_calendar` - `v0.2.0`](#flip_calendar---v020)
+
+Packages with other changes:
+
+ - There are no other changes in this release.
+
+---
+
+#### `flip_calendar` - `v0.2.0`
+
+ - **BREAKING** **FEAT**: centralize calendar state and stabilize page turns ([#3](https://github.com/resengi/flip_calendar/issues/3)). ([03be944e](https://github.com/resengi/flip_calendar/commit/03be944edc86c4ecac1a347b96c922100f2cc8ad))
+
+## 0.2.0
+
+> Note: This release has breaking changes.
+
+ - **BREAKING** **FEAT**: centralize calendar state and stabilize page turns ([#3](https://github.com/resengi/flip_calendar/issues/3)). ([03be944e](https://github.com/resengi/flip_calendar/commit/03be944edc86c4ecac1a347b96c922100f2cc8ad))
+
+# Change Log
+
 ## 2026-03-23
 
 ### Changes
@@ -63,3 +93,4 @@ Packages with other changes:
 - Flexible date constraints via `DateConstraint` — supports fixed, relative, and dynamic (e.g., today) boundaries for both navigation and selection.
 - Fully customizable day cell rendering through `dayBuilder` with `CalendarDayData` providing per-cell state (today, selected, enabled, current month, etc.).
 - `CalendarStyle` with built-in light and dark presets, `copyWith` support, and fine-grained control over grid, header, animation, and gesture behavior.
+`CalendarStyle` with built-in light and dark presets, `copyWith` support, and fine-grained control over grid, header, animation, and gesture behavior.

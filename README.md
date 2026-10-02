@@ -46,7 +46,7 @@ Add the package to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flip_calendar: ^0.1.2
+  flip_calendar: ^0.2.0
   page_turn_animation: ^0.1.4
 ```
 
