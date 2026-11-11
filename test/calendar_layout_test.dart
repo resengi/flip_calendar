@@ -29,7 +29,10 @@ void main() {
     );
   }
 
-  CalendarController controllerFor(WidgetTester tester, {bool animated = false}) {
+  CalendarController controllerFor(
+    WidgetTester tester, {
+    bool animated = false,
+  }) {
     final controller = CalendarController(
       initialMonth: month,
       animationsEnabled: animated,
@@ -96,80 +99,78 @@ void main() {
     expect(tester.getSize(header(style)).height, 10);
   });
 
-  testWidgets('a zero-height default calendar settles and keeps building cells', (
-    tester,
-  ) async {
-    final controller = controllerFor(tester, animated: true);
-    final built = <DateTime>{};
-    Widget page(double height) => host(
-      controller: controller,
-      height: height,
-      style: const CalendarStyle(),
-      dayBuilder: (context, data) {
-        built.add(data.date);
-        return const SizedBox.shrink();
-      },
-    );
-    await tester.pumpWidget(page(0));
-    built.clear();
-    controller.nextMonth();
-    await tester.pump();
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-    expect(controller.currentMonth, DateTime(2024, 7));
-    expect(controller.isNavigating, isFalse);
-    expect(find.byType(PageTurnAnimation), findsNothing);
-    expect(built.any((date) => date.year == 2024 && date.month == 7), isTrue);
-    await tester.pumpWidget(page(400));
-    expect(tester.takeException(), isNull);
-    expect(controller.currentMonth, DateTime(2024, 7));
-  });
+  testWidgets(
+    'a zero-height default calendar settles and keeps building cells',
+    (tester) async {
+      final controller = controllerFor(tester, animated: true);
+      final built = <DateTime>{};
+      Widget page(double height) => host(
+        controller: controller,
+        height: height,
+        style: const CalendarStyle(),
+        dayBuilder: (context, data) {
+          built.add(data.date);
+          return const SizedBox.shrink();
+        },
+      );
+      await tester.pumpWidget(page(0));
+      built.clear();
+      controller.nextMonth();
+      await tester.pump();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(controller.currentMonth, DateTime(2024, 7));
+      expect(controller.isNavigating, isFalse);
+      expect(find.byType(PageTurnAnimation), findsNothing);
+      expect(built.any((date) => date.year == 2024 && date.month == 7), isTrue);
+      await tester.pumpWidget(page(400));
+      expect(tester.takeException(), isNull);
+      expect(controller.currentMonth, DateTime(2024, 7));
+    },
+  );
 
   for (final scenario in [
     (month: DateTime(-271821, 5), delta: 15.0),
     (month: DateTime(275760, 8), delta: -15.0),
   ]) {
-    testWidgets(
-      'a swipe past ${scenario.month.year}-${scenario.month.month} '
-      'stays restricted',
-      (tester) async {
-        final controller = CalendarController(initialMonth: scenario.month);
-        addTearDown(() async {
-          await tester.pumpWidget(const SizedBox.shrink());
-          controller.dispose();
-        });
-        final haptics = <CalendarHapticType>[];
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  width: 300,
-                  height: 400,
-                  child: FlipCalendar(
-                    controller: controller,
-                    onHapticFeedback: haptics.add,
-                    dayBuilder: (context, data) => const SizedBox.shrink(),
-                  ),
+    testWidgets('a swipe past ${scenario.month.year}-${scenario.month.month} '
+        'stays restricted', (tester) async {
+      final controller = CalendarController(initialMonth: scenario.month);
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+      });
+      var restricted = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 300,
+                height: 400,
+                child: FlipCalendar(
+                  controller: controller,
+                  onNavigationRestricted: () => restricted++,
+                  dayBuilder: (context, data) => const SizedBox.shrink(),
                 ),
               ),
             ),
           ),
-        );
-        final gesture = await tester.startGesture(
-          tester.getCenter(find.byType(FlipCalendar)),
-        );
-        for (var step = 0; step < 10; step++) {
-          await gesture.moveBy(Offset(0, scenario.delta));
-        }
-        await tester.pump();
-        await gesture.up();
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        expect(controller.currentMonth, scenario.month);
-        expect(controller.isNavigating, isFalse);
-        expect(haptics, [CalendarHapticType.navigationRestricted]);
-      },
-    );
+        ),
+      );
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(FlipCalendar)),
+      );
+      for (var step = 0; step < 10; step++) {
+        await gesture.moveBy(Offset(0, scenario.delta));
+      }
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(controller.currentMonth, scenario.month);
+      expect(controller.isNavigating, isFalse);
+      expect(restricted, 1);
+    });
   }
 }

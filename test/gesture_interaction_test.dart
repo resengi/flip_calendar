@@ -19,12 +19,12 @@ void main() {
 
   late ValueNotifier<DateTime> clock;
   late CalendarController controller;
-  late List<CalendarHapticType> haptics;
+  late int restricted;
 
   setUp(() {
     clock = ValueNotifier(DateTime(2024, 6, 12));
     controller = CalendarController(initialMonth: june2024, clock: clock);
-    haptics = [];
+    restricted = 0;
   });
 
   tearDown(() {
@@ -45,7 +45,7 @@ void main() {
           child: FlipCalendar(
             controller: controller,
             style: testStyle,
-            onHapticFeedback: haptics.add,
+            onNavigationRestricted: () => restricted++,
             dayBuilder: (context, data) {
               return Center(child: Text(data.date.day.toString()));
             },
@@ -62,8 +62,9 @@ void main() {
       await tester.pumpWidget(buildCalendar());
       await tester.pumpAndSettle();
 
-      // 60 px of the 280 px drag box (0.7 of 400 px): progress 0.21, below
-      // the 0.3 dragProgressThreshold.
+      // The first 20 px cross the drag threshold: gripped 180 px from the
+      // hinge, the drag's 40 px are short of the 0.3 dragProgressThreshold of
+      // that way, 54 px.
       await tester.drag(find.byType(FlipCalendar), const Offset(0, -60));
 
       await tester.pumpAndSettle();
@@ -88,7 +89,7 @@ void main() {
         // Trigger programmatic navigation to July.
         controller.goToMonth(DateTime(2024, 7, 1));
 
-        // Pump a few frames — programmatic animation starts.
+        // Pump a few frames, programmatic animation starts.
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
 
@@ -107,9 +108,9 @@ void main() {
           equals(DateTime(2024, 7, 1)),
           reason: 'A fling during a programmatic page turn is ignored.',
         );
-        // The calendar ignores the fling: it starts no swipe, so it sends no
-        // haptic either (a swipe started while busy would be restricted).
-        expect(haptics, isEmpty);
+        // The calendar ignores the fling: it starts no swipe, so it reports no
+        // restriction either (a swipe started while busy would be restricted).
+        expect(restricted, 0);
       },
     );
   });

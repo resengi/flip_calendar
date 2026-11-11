@@ -8,10 +8,10 @@ A customizable Flutter month calendar widget with realistic page-turn animations
 
 <table>
   <tr>
-    <td><img src="https://raw.githubusercontent.com/resengi/flip_calendar/main/assets/top_edge_example.gif" width="200" alt="Top edge demo"></td>
-    <td><img src="https://raw.githubusercontent.com/resengi/flip_calendar/main/assets/bottom_edge_example.gif" width="200" alt="Bottom edge demo"></td>
-    <td><img src="https://raw.githubusercontent.com/resengi/flip_calendar/main/assets/left_edge_example.gif" width="200" alt="Left edge demo"></td>
-    <td><img src="https://raw.githubusercontent.com/resengi/flip_calendar/main/assets/right_edge_example.gif" width="200" alt="Right edge demo"></td>
+    <td><img src="https://raw.githubusercontent.com/resengi/flip_calendar/main/assets/top_edge_example.webp" width="200" alt="Top edge demo"></td>
+    <td><img src="https://raw.githubusercontent.com/resengi/flip_calendar/main/assets/bottom_edge_example.webp" width="200" alt="Bottom edge demo"></td>
+    <td><img src="https://raw.githubusercontent.com/resengi/flip_calendar/main/assets/left_edge_example.webp" width="200" alt="Left edge demo"></td>
+    <td><img src="https://raw.githubusercontent.com/resengi/flip_calendar/main/assets/right_edge_example.webp" width="200" alt="Right edge demo"></td>
   </tr>
   <tr>
     <td align="center">Top</td>
@@ -24,7 +24,7 @@ A customizable Flutter month calendar widget with realistic page-turn animations
 ## Features
 
 - Realistic 3D page curl effect when navigating between months
-- Swipe gesture navigation with flick detection
+- Swipe gesture navigation with flick detection; a swipe to the next month holds the page where the finger grips it
 - Fully customizable day cell rendering via builder
 - Programmatic navigation with `CalendarController`, with a busy signal and futures to wait on
 - Date constraints (min/max): fixed dates, or dates relative to today
@@ -33,7 +33,8 @@ A customizable Flutter month calendar widget with realistic page-turn animations
 - Configurable bound edge (top, bottom, left, right)
 - Sequential or direct-jump multi-month animation modes
 - Built-in light and dark theme presets
-- A haptic feedback hook for swipes that cannot navigate
+- A colour or a per-month image on the back of a turning page
+- A callback for swipes that cannot navigate, for haptics or other feedback
 - Works with any first day of week (Monday, Sunday, etc.)
 
 ## Requirements
@@ -47,7 +48,6 @@ Add the package to your `pubspec.yaml`:
 ```yaml
 dependencies:
   flip_calendar: ^0.2.0
-  page_turn_animation: ^0.1.4
 ```
 
 Then run:
@@ -56,7 +56,7 @@ Then run:
 flutter pub get
 ```
 
-`page_turn_animation` provides `PageTurnEdge` and `PageTurnStyle`; import it wherever you use them.
+`flip_calendar` exports `PageTurnEdge` and `PageTurnStyle` from `page_turn_animation`, so `package:flip_calendar/flip_calendar.dart` is the only import you need.
 
 ## Quick Start
 
@@ -181,13 +181,13 @@ The `dayBuilder` callback receives a `CalendarDayData` object with everything yo
 FlipCalendar(
   controller: controller,
   dayBuilder: (context, data) {
-    // data.date           — the date this cell represents
-    // data.isCurrentMonth — false for days of the adjacent months
-    // data.isToday        — whether this date is the controller's today
-    // data.isSelected     — whether this date is selectedDate's day
-    // data.isFutureDate   — whether this date is after today
-    // data.isEnabled      — whether this date is within the bounds
-    // data.row / data.column — the cell's place in the grid (0-based)
+    // data.date                the date this cell represents
+    // data.isCurrentMonth      false for days of the adjacent months
+    // data.isToday             whether this date is the controller's today
+    // data.isSelected          whether this date is selectedDate's day
+    // data.isFutureDate        whether this date is after today
+    // data.isEnabled           whether this date is within the bounds
+    // data.row / data.column   the cell's place in the grid (0-based)
 
     return Center(
       child: Text(
@@ -294,18 +294,20 @@ FlipCalendar(
 
 | Edge | Gesture | Next month | Use Case |
 |------|---------|------------|----------|
-| `top` | Vertical | Swipe up | Top-bound notepad (default) |
-| `bottom` | Vertical | Swipe down | Wall calendar, bottom-bound pad |
-| `left` | Horizontal | Swipe left | Right-to-left book, manga |
-| `right` | Horizontal | Swipe right | Left-to-right book, standard Western reading |
+| `top` | Vertical | Swipe up | Top-bound notepad, wall calendar (default) |
+| `bottom` | Vertical | Swipe down | Bottom-bound pad |
+| `left` | Horizontal | Swipe left | Left-to-right book, standard Western reading |
+| `right` | Horizontal | Swipe right | Right-to-left book, manga |
 
 ### Swipes
 
 - A swipe follows the finger that started it; other fingers are ignored until it lifts. Its direction is the net movement along the swipe axis when the drag threshold is crossed.
-- While the finger moves, the page follows it: the distance moved along the axis since the drag was accepted, over `dragBoxSizePercentage` of the calendar's size along the axis, mapped through `dragCurve`. Travel past either end of that box is discarded, so the page follows a reversal at once; back past the start it rests flat. A swipe never turns the other way.
-- On release, a flick in the swipe's direction completes it and a flick against it does not. Without a flick, the swipe completes when the page is turned at least `dragProgressThreshold` of the way. A flick is a release faster than `flickDistanceThreshold` of the calendar's size along the axis per `flickMaxDuration`, that passes Flutter's minimum fling distance for the pointer device.
+- A swipe to the next month holds the page where it is gripped, the point where the drag was accepted: the page turns as `page_turn_animation`'s `PageTurnDragProgress` gives for the finger's travel, so the paper under the finger follows it until it reaches the bound edge. While the page lies flat, moving the finger back over it moves the grip with it. Past the free edge the page lies flat until the finger is back over it, and past the end of the turn it stays turned until the finger comes back. A grip nearer the bound edge than a tenth of the page, closer than the page turn can hold, holds the nearest paper it can, moving faster than the finger, as much faster as brings it to the bound edge with the finger, but at most `nearEdgeMaxSpeedUp` times as fast (2 by default).
+- A swipe to the previous month, and a swipe to the next month gripped at or past the bound edge, turns the page through a drag box: the distance moved along the axis since the drag was accepted, over `dragBoxFraction` of the calendar's size along the axis, mapped through `dragCurve`. Travel past either end of that box is discarded, so the page follows a reversal at once; back past the start it rests flat.
+- A swipe never turns the other way.
+- On release, a flick in the swipe's direction completes it and a flick against it does not. Without a flick, a swipe that holds the page completes once the finger has come `dragProgressThreshold` of the way it takes to bring the paper it holds to the bound edge (from the grip, unless gripped nearer than a tenth of the page), and a swipe through the drag box once it has come that share of the box. A flick is a release faster than `flickDistanceThreshold` of the calendar's size along the axis per `flickMaxDuration`, that passes Flutter's minimum fling distance for the pointer device.
 - A swipe that does not complete turns the page back, and the month does not change. A cancelled pointer, the calendar collapsing to no size, a change of `boundEdge`, turning `gesturesEnabled` off, or an input that fails its check (see [Validation](#validation)) ends a swipe the same way.
-- A swipe toward a month outside the bounds, with no allowed month beyond it in that direction, cannot land: the page lifts slightly and turns back, and `onHapticFeedback` is called once with `CalendarHapticType.navigationRestricted` when the swipe starts. With animations off, only the haptic happens.
+- A swipe toward a month outside the bounds, with no allowed month beyond it in that direction, cannot land: it turns the page as a swipe that lands would, but no more than `restrictedNextTurn` of the turn toward the next month (15% by default) and `restrictedPreviousTurn` toward the previous (3%), and the page turns back on release. `onNavigationRestricted` is called once when the swipe starts. With animations off, the page does not move, and `onNavigationRestricted` is still called.
 - A swipe out of a month that is outside the bounds, toward the allowed range, turns straight to the nearest allowed month in one page turn.
 - If the swipe's month becomes forbidden before the swipe lands, the calendar returns to the controller's month.
 - Swipes work with animations off: a completed swipe changes the month without a page turn.
@@ -352,17 +354,12 @@ The weekday header row rotates to match.
 
 ### Haptic Feedback
 
-The calendar calls `onHapticFeedback` for one event: a swipe that cannot land (see [Swipes](#swipes)). You implement the actual feedback:
+The calendar calls `onNavigationRestricted` when a swipe cannot land (see [Swipes](#swipes)). You implement the feedback:
 
 ```dart
 FlipCalendar(
   controller: controller,
-  onHapticFeedback: (type) {
-    switch (type) {
-      case CalendarHapticType.navigationRestricted:
-        HapticFeedback.heavyImpact();
-    }
-  },
+  onNavigationRestricted: HapticFeedback.heavyImpact,
   dayBuilder: dayBuilder,
 )
 ```
@@ -432,6 +429,20 @@ FlipCalendar(
 )
 ```
 
+### Page Back
+
+The back of a turning page is `pageTurnStyle.backgroundColor` (white by default). `pageBack` draws an image there instead, chosen for the month whose page turns:
+
+```dart
+FlipCalendar(
+  controller: controller,
+  pageBack: (month) => AssetImage('assets/backs/${month.month}.png'),
+  dayBuilder: dayBuilder,
+)
+```
+
+It is asked for the month turned away from on a turn to a later month, and the month turned back to on a turn to an earlier one; returning null keeps the plain back. A turn draws the image if it has loaded by the time the turn starts, and the plain back otherwise: `precacheImage` loads it ahead of the first turn. If `pageBack` throws, or its image fails to load, the error is reported through `FlutterError.reportError` and the turn draws the plain back.
+
 ### Theme Presets
 
 ```dart
@@ -450,7 +461,7 @@ FlipCalendar(
 )
 ```
 
-`CalendarStyle.dark()` is the default style with nine dark colours: `calendarBackground`, `gridLineColor`, `weekdayHeaderBackground`, `weekdayHeaderTextColor`, `dayTextColor`, `disabledDayTextColor`, `todayBorderColor`, `selectedDayBackground` and `disabledDateBackground`.
+`CalendarStyle.dark()` is the default style with seven dark colours: `calendarBackground`, `gridLineColor`, `weekdayHeaderBackground`, `weekdayHeaderTextColor`, `todayBorderColor`, `selectedDayBackground` and `disabledDateBackground`.
 
 ### Using copyWith
 
@@ -497,16 +508,6 @@ Every day cell has the same size.
 | `weekdayTextStyle` | `TextStyle?` | `null` | Text style of the names. When set, it replaces the whole default style (weight 500, size 14, `weekdayHeaderTextColor`) |
 | `weekdayNames` | `List<String>` | `['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']` | Weekday names starting from Sunday, rotated to `firstDayOfWeek`. Exactly 7 names |
 
-#### Day Cells
-
-The calendar does not draw with these fields; a day builder can read them from the style you pass.
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `dayTextColor` | `Color` | `Color(0xDD000000)` | Text color for day numbers |
-| `disabledDayTextColor` | `Color` | `Color(0xFF9E9E9E)` | Text color for disabled days |
-| `dayTextSize` | `double` | `16.0` | Font size for day numbers. Finite and not negative |
-
 #### Today Indicator
 
 | Property | Type | Default | Description |
@@ -528,8 +529,8 @@ The calendar does not draw with these fields; a day builder can read them from t
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `animationDuration` | `Duration` | `Duration(milliseconds: 650)` | Duration of a page turn. A navigation that turns several pages divides it equally among them. Not negative |
-| `animationCurve` | `Curve` | `Curves.decelerate` | Curve of the part of a page turn that runs by itself: each turn of a navigation, and a swipe's turn after release. While a swipe is dragged, the page follows the finger through `dragCurve` |
-| `dragCurve` | `Curve` | `Curves.linear` | Maps a swipe's progress through the drag box to how far the page is turned while the finger is down. The default keeps the page under the finger; `Curves.decelerate` turns it ahead of the finger. Does not affect when a released swipe completes |
+| `animationCurve` | `Curve` | `Curves.decelerate` | Curve of the part of a page turn that runs by itself: each turn of a navigation, and a swipe's turn after release. While a swipe is dragged, the drag sets the turn (see [Swipes](#swipes)) |
+| `dragCurve` | `Curve` | `Curves.linear` | Maps the progress of a swipe that turns through the drag box to how far the page is turned while the finger is down: a previous-month swipe, and a next-month swipe gripped at or past the bound edge. The default turns the page in step with the drag; `Curves.decelerate` turns it ahead. A next-month swipe gripped on the page takes no curve. Does not affect when a released swipe completes |
 | `pageTurnStyle` | `PageTurnStyle` | `PageTurnStyle()` | Style for the page curl effect |
 
 #### Gestures
@@ -538,8 +539,11 @@ The calendar does not draw with these fields; a day builder can read them from t
 |----------|------|---------|-------------|
 | `flickDistanceThreshold` | `double` | `0.05` | With `flickMaxDuration`, sets the flick speed: this fraction of the calendar's size along the swipe axis per `flickMaxDuration`. Finite and greater than 0 |
 | `flickMaxDuration` | `Duration` | `Duration(milliseconds: 500)` | With `flickDistanceThreshold`, sets the flick speed. Greater than zero |
-| `dragBoxSizePercentage` | `double` | `0.7` | The fraction of the calendar's size along the swipe axis that a drag covers to turn the page all the way. Finite and greater than 0 |
-| `dragProgressThreshold` | `double` | `0.3` | How far the page must be turned for a release that is not a flick to complete the swipe. Greater than 0 and at most 1 |
+| `dragBoxFraction` | `double` | `0.7` | The fraction of the calendar's size along the swipe axis that a swipe turning through the drag box (see `dragCurve`) covers to turn the page all the way. Finite and greater than 0 |
+| `dragProgressThreshold` | `double` | `0.3` | How far a released swipe that is not a flick must have come to complete: this share of the way the finger takes to bring the paper it holds to the bound edge for a swipe that holds the page (from its grip, unless gripped nearer than a tenth of the page: see `nearEdgeMaxSpeedUp`), and this share of the drag box for one that turns through it. Greater than 0 and at most 1 |
+| `nearEdgeMaxSpeedUp` | `double` | `2` | How many times the finger's speed a swipe toward the next month, gripped nearer the bound edge than a tenth of the page, moves the nearest paper the page turn can hold at most. At least 1; `double.infinity` removes the limit |
+| `restrictedNextTurn` | `double` | `0.15` | How far a swipe toward the next month that cannot land turns the page before it turns back, as a share of the turn. 0 keeps the page flat. At least 0 and at most 1 |
+| `restrictedPreviousTurn` | `double` | `0.03` | How far a swipe toward the previous month that cannot land turns the page before it turns back, as a share of the turn. That turn shows the earlier page past the bound edge from its start. At least 0 and at most 1 |
 
 ## Validation
 
@@ -649,7 +653,8 @@ const FlipCalendar({
   required Widget Function(BuildContext, CalendarDayData) dayBuilder,
   DateTime? selectedDate,
   void Function(DateTime)? onDayTap,
-  void Function(CalendarHapticType)? onHapticFeedback,
+  VoidCallback? onNavigationRestricted,
+  ImageProvider? Function(DateTime month)? pageBack,
   CalendarStyle style = const CalendarStyle(),
   int firstDayOfWeek = DateTime.sunday,
   PageTurnEdge boundEdge = PageTurnEdge.top,
@@ -729,12 +734,6 @@ A date boundary: a rule that the controller resolves against its today.
 |-------|-------------|
 | `sequential` | One page turn per month moved, up to `maxAnimatedMonthJump` months |
 | `directJump` | One page turn from the current month to the target |
-
-### CalendarHapticType
-
-| Value | Description |
-|-------|-------------|
-| `navigationRestricted` | A swipe started toward a month it cannot reach |
 
 ### CalendarStyle
 

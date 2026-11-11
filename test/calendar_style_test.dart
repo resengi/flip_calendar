@@ -1,7 +1,6 @@
 import 'package:flip_calendar/flip_calendar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:page_turn_animation/page_turn_animation.dart';
 
 void main() {
   group('CalendarStyle', () {
@@ -20,9 +19,6 @@ void main() {
         // A new list on every call, so two such styles are not one instance
         // and hold equal lists that are not one list.
         weekdayNames: List.of(const ['S', 'M', 'T', 'W', 'T', 'F', 'S']),
-        dayTextColor: const Color(0xFF000005),
-        disabledDayTextColor: const Color(0xFF000006),
-        dayTextSize: 17,
         todayBorderColor: const Color(0xFF000007),
         todayBorderWidth: 3,
         todayBorderRadius: const BorderRadius.all(Radius.circular(5)),
@@ -35,8 +31,11 @@ void main() {
         pageTurnStyle: const PageTurnStyle(segments: 1),
         flickDistanceThreshold: 0.5,
         flickMaxDuration: const Duration(milliseconds: 1),
-        dragBoxSizePercentage: 0.5,
+        dragBoxFraction: 0.5,
         dragProgressThreshold: 0.5,
+        nearEdgeMaxSpeedUp: 3,
+        restrictedNextTurn: 0.5,
+        restrictedPreviousTurn: 0.25,
       );
     }
 
@@ -55,9 +54,6 @@ void main() {
         style.weekdayNames,
         equals(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
       );
-      expect(style.dayTextColor, equals(const Color(0xDD000000)));
-      expect(style.disabledDayTextColor, equals(const Color(0xFF9E9E9E)));
-      expect(style.dayTextSize, equals(16.0));
       expect(style.todayBorderColor, equals(const Color(0xFF2196F3)));
       expect(style.todayBorderWidth, equals(2.0));
       expect(
@@ -76,22 +72,23 @@ void main() {
       expect(style.pageTurnStyle, equals(const PageTurnStyle()));
       expect(style.flickDistanceThreshold, equals(0.05));
       expect(style.flickMaxDuration, equals(const Duration(milliseconds: 500)));
-      expect(style.dragBoxSizePercentage, equals(0.7));
+      expect(style.dragBoxFraction, equals(0.7));
       expect(style.dragProgressThreshold, equals(0.3));
+      expect(style.nearEdgeMaxSpeedUp, equals(2));
+      expect(style.restrictedNextTurn, equals(0.15));
+      expect(style.restrictedPreviousTurn, equals(0.03));
     });
 
     test('light() is the default style', () {
       expect(CalendarStyle.light(), equals(const CalendarStyle()));
     });
 
-    test('dark() is the default style with nine dark colours', () {
+    test('dark() is the default style with seven dark colours', () {
       final dark = CalendarStyle.dark();
       expect(dark.calendarBackground, equals(const Color(0xFF212121)));
       expect(dark.gridLineColor, equals(const Color(0xFF424242)));
       expect(dark.weekdayHeaderBackground, equals(const Color(0xFF303030)));
       expect(dark.weekdayHeaderTextColor, equals(const Color(0xFFFFFFFF)));
-      expect(dark.dayTextColor, equals(const Color(0xFFFFFFFF)));
-      expect(dark.disabledDayTextColor, equals(const Color(0xFF757575)));
       expect(dark.todayBorderColor, equals(const Color(0xFF64B5F6)));
       expect(dark.selectedDayBackground, equals(const Color(0x3364B5F6)));
       expect(dark.disabledDateBackground, equals(const Color(0x33757575)));
@@ -105,8 +102,6 @@ void main() {
             gridLineColor: dark.gridLineColor,
             weekdayHeaderBackground: dark.weekdayHeaderBackground,
             weekdayHeaderTextColor: dark.weekdayHeaderTextColor,
-            dayTextColor: dark.dayTextColor,
-            disabledDayTextColor: dark.disabledDayTextColor,
             todayBorderColor: dark.todayBorderColor,
             selectedDayBackground: dark.selectedDayBackground,
             disabledDateBackground: dark.disabledDateBackground,
@@ -130,9 +125,6 @@ void main() {
           weekdayHeaderHeight: other.weekdayHeaderHeight,
           weekdayTextStyle: other.weekdayTextStyle,
           weekdayNames: other.weekdayNames,
-          dayTextColor: other.dayTextColor,
-          disabledDayTextColor: other.disabledDayTextColor,
-          dayTextSize: other.dayTextSize,
           todayBorderColor: other.todayBorderColor,
           todayBorderWidth: other.todayBorderWidth,
           todayBorderRadius: other.todayBorderRadius,
@@ -145,8 +137,11 @@ void main() {
           pageTurnStyle: other.pageTurnStyle,
           flickDistanceThreshold: other.flickDistanceThreshold,
           flickMaxDuration: other.flickMaxDuration,
-          dragBoxSizePercentage: other.dragBoxSizePercentage,
+          dragBoxFraction: other.dragBoxFraction,
           dragProgressThreshold: other.dragProgressThreshold,
+          nearEdgeMaxSpeedUp: other.nearEdgeMaxSpeedUp,
+          restrictedNextTurn: other.restrictedNextTurn,
+          restrictedPreviousTurn: other.restrictedPreviousTurn,
         ),
         equals(other),
       );
@@ -189,11 +184,6 @@ void main() {
           weekdayTextStyle: other.weekdayTextStyle,
         ),
         'weekdayNames': CalendarStyle(weekdayNames: other.weekdayNames),
-        'dayTextColor': CalendarStyle(dayTextColor: other.dayTextColor),
-        'disabledDayTextColor': CalendarStyle(
-          disabledDayTextColor: other.disabledDayTextColor,
-        ),
-        'dayTextSize': CalendarStyle(dayTextSize: other.dayTextSize),
         'todayBorderColor': CalendarStyle(
           todayBorderColor: other.todayBorderColor,
         ),
@@ -222,11 +212,20 @@ void main() {
         'flickMaxDuration': CalendarStyle(
           flickMaxDuration: other.flickMaxDuration,
         ),
-        'dragBoxSizePercentage': CalendarStyle(
-          dragBoxSizePercentage: other.dragBoxSizePercentage,
+        'dragBoxFraction': CalendarStyle(
+          dragBoxFraction: other.dragBoxFraction,
         ),
         'dragProgressThreshold': CalendarStyle(
           dragProgressThreshold: other.dragProgressThreshold,
+        ),
+        'nearEdgeMaxSpeedUp': CalendarStyle(
+          nearEdgeMaxSpeedUp: other.nearEdgeMaxSpeedUp,
+        ),
+        'restrictedNextTurn': CalendarStyle(
+          restrictedNextTurn: other.restrictedNextTurn,
+        ),
+        'restrictedPreviousTurn': CalendarStyle(
+          restrictedPreviousTurn: other.restrictedPreviousTurn,
         ),
       };
 

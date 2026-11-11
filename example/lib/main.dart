@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flip_calendar/flip_calendar.dart';
 import 'package:flutter/material.dart';
-import 'package:page_turn_animation/page_turn_animation.dart';
+import 'package:flutter/services.dart';
 
 void main() => runApp(const FlipCalendarExample());
 
@@ -208,6 +208,9 @@ class _CalendarExamplePageState extends State<CalendarExamplePage> {
                     controller: _controller,
                     selectedDate: _selectedDate,
                     onDayTap: _onDayTapped,
+                    // A swipe past today's month, the last allowed, cannot
+                    // land: a light haptic says so.
+                    onNavigationRestricted: HapticFeedback.mediumImpact,
                     boundEdge: _boundEdge,
                     style: const CalendarStyle(
                       padding: EdgeInsets.all(20),

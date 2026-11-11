@@ -55,9 +55,9 @@ class _CellState extends State<_Cell> {
 }
 
 Future<void> _expectReadyImage(WidgetTester tester) async {
-  final image = tester.widget<PageTurnAnimation>(
-    find.byType(PageTurnAnimation),
-  ).image;
+  final image = tester
+      .widget<PageTurnAnimation>(find.byType(PageTurnAnimation))
+      .image;
   final pixels = await tester.runAsync(
     () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
   );
@@ -67,12 +67,16 @@ Future<void> _expectReadyImage(WidgetTester tester) async {
   var ready = 0;
   var waiting = 0;
   for (var i = 0; i < bytes.length; i += 4) {
-    if (bytes[i] == 0 && bytes[i + 1] == 255 &&
-        bytes[i + 2] == 0 && bytes[i + 3] == 255) {
+    if (bytes[i] == 0 &&
+        bytes[i + 1] == 255 &&
+        bytes[i + 2] == 0 &&
+        bytes[i + 3] == 255) {
       ready++;
     }
-    if (bytes[i] == 255 && bytes[i + 1] == 0 &&
-        bytes[i + 2] == 255 && bytes[i + 3] == 255) {
+    if (bytes[i] == 255 &&
+        bytes[i + 1] == 0 &&
+        bytes[i + 2] == 255 &&
+        bytes[i + 3] == 255) {
       waiting++;
     }
   }
@@ -113,15 +117,17 @@ void main() {
             gesturesEnabled: gesturesEnabled,
             boundEdge: boundEdge,
             style: style,
-            dayBuilder: dayBuilder ?? (context, data) => data.isCurrentMonth
-                ? _Cell(
-                    key: ValueKey(data.date),
-                    date: data.date,
-                    states: states,
-                    disposed: disposed,
-                    updateAfterFrame: updateAfterFrame,
-                  )
-                : const SizedBox.expand(),
+            dayBuilder:
+                dayBuilder ??
+                (context, data) => data.isCurrentMonth
+                    ? _Cell(
+                        key: ValueKey(data.date),
+                        date: data.date,
+                        states: states,
+                        disposed: disposed,
+                        updateAfterFrame: updateAfterFrame,
+                      )
+                    : const SizedBox.expand(),
           ),
         ),
       ),
@@ -253,17 +259,19 @@ void main() {
     tester,
   ) async {
     final ready = Future<String>.value('ready');
-    await tester.pumpWidget(subject(dayBuilder: (context, data) =>
-      FutureBuilder<String>(
-        future: ready,
-        builder: (context, snapshot) => ColoredBox(
-          color: snapshot.hasData
-              ? const Color(0xFF00FF00)
-              : const Color(0xFFFF00FF),
-          child: const SizedBox.expand(),
+    await tester.pumpWidget(
+      subject(
+        dayBuilder: (context, data) => FutureBuilder<String>(
+          future: ready,
+          builder: (context, snapshot) => ColoredBox(
+            color: snapshot.hasData
+                ? const Color(0xFF00FF00)
+                : const Color(0xFFFF00FF),
+            child: const SizedBox.expand(),
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     controller.nextMonth();
     await tester.pump();
@@ -298,12 +306,14 @@ void main() {
           var returned = false;
           final landing = DateTime(2024, forward ? 7 : 5);
           void listener() {
-            if (!returned && !controller.isNavigating &&
+            if (!returned &&
+                !controller.isNavigating &&
                 controller.currentMonth == landing) {
               returned = true;
               controller.goToMonth(DateTime(2024, 6));
             }
           }
+
           if (before) controller.addListener(listener);
           await tester.pumpWidget(subject());
           if (!before) controller.addListener(listener);
@@ -344,7 +354,12 @@ void main() {
   });
 
   for (final interruption in [
-    'detach', 'controller', 'gestures', 'edge', 'ticker', 'bounds',
+    'detach',
+    'controller',
+    'gestures',
+    'edge',
+    'ticker',
+    'bounds',
   ]) {
     testWidgets('backward preparation handles $interruption', (tester) async {
       await tester.pumpWidget(subject());
@@ -368,9 +383,7 @@ void main() {
         case 'ticker':
           await tester.pumpWidget(subject(tickerEnabled: false));
         case 'bounds':
-          controller.setBounds(
-            DateConstraint.fixed(DateTime(2024, 6)), null,
-          );
+          controller.setBounds(DateConstraint.fixed(DateTime(2024, 6)), null);
       }
       await gesture.cancel();
       await tester.pumpAndSettle();
@@ -419,7 +432,8 @@ void main() {
   ) async {
     var returned = false;
     controller.addListener(() {
-      if (!returned && !controller.isNavigating &&
+      if (!returned &&
+          !controller.isNavigating &&
           controller.currentMonth == DateTime(2024, 7)) {
         returned = true;
         controller.previousMonth();
@@ -433,9 +447,11 @@ void main() {
         dayBuilder: (context, data) => Text('${data.date.month}'),
       ),
     );
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: Row(children: [calendar(), calendar()])),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: Row(children: [calendar(), calendar()])),
+      ),
+    );
     await tester.drag(find.byType(FlipCalendar).first, const Offset(0, -200));
     await tester.pumpAndSettle();
     expect(returned, isTrue);
@@ -453,19 +469,21 @@ void main() {
       DateConstraint.fixed(DateTime(2024, 6, 30)),
     );
     var notifications = 0;
-    var haptics = 0;
+    var restricted = 0;
     controller.addListener(() => notifications++);
-    await tester.pumpWidget(MaterialApp(
-      home: SizedBox(
-        width: 300,
-        height: 400,
-        child: FlipCalendar(
-          controller: controller,
-          onHapticFeedback: (_) => haptics++,
-          dayBuilder: (context, data) => const SizedBox.expand(),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 300,
+          height: 400,
+          child: FlipCalendar(
+            controller: controller,
+            onNavigationRestricted: () => restricted++,
+            dayBuilder: (context, data) => const SizedBox.expand(),
+          ),
         ),
       ),
-    ));
+    );
     final gesture = await tester.startGesture(
       tester.getCenter(find.byType(FlipCalendar)),
     );
@@ -475,7 +493,7 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
     expect(notifications, 0);
-    expect(haptics, 0);
+    expect(restricted, 0);
     expect(find.byType(PageTurnAnimation), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -522,27 +540,33 @@ void main() {
         await tester.pump();
         await tester.pump();
         await tester.pumpWidget(subject(style: updated));
-        final animation = tester.widget<PageTurnAnimation>(
-          find.byType(PageTurnAnimation),
-        ).animation as AnimationController;
+        final animation =
+            tester
+                    .widget<PageTurnAnimation>(find.byType(PageTurnAnimation))
+                    .animation
+                as AnimationController;
         expect(animation.duration, initial.animationDuration);
         await gesture.up();
       } else {
         controller.nextMonth();
         await tester.pump();
         await tester.pumpWidget(subject(style: updated));
-        final animation = tester.widget<PageTurnAnimation>(
-          find.byType(PageTurnAnimation),
-        ).animation as AnimationController;
+        final animation =
+            tester
+                    .widget<PageTurnAnimation>(find.byType(PageTurnAnimation))
+                    .animation
+                as AnimationController;
         expect(animation.duration, initial.animationDuration);
       }
       await tester.pumpAndSettle();
       controller.nextMonth();
       await tester.pump();
       await tester.pump();
-      final animation = tester.widget<PageTurnAnimation>(
-        find.byType(PageTurnAnimation),
-      ).animation as AnimationController;
+      final animation =
+          tester
+                  .widget<PageTurnAnimation>(find.byType(PageTurnAnimation))
+                  .animation
+              as AnimationController;
       expect(animation.duration, updated.animationDuration);
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox.shrink());
