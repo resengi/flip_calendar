@@ -26,8 +26,6 @@ class CalendarStyle {
     gridLineColor: Color(0xFF424242),
     weekdayHeaderBackground: Color(0xFF303030),
     weekdayHeaderTextColor: Color(0xFFFFFFFF),
-    dayTextColor: Color(0xFFFFFFFF),
-    disabledDayTextColor: Color(0xFF757575),
     todayBorderColor: Color(0xFF64B5F6),
     selectedDayBackground: Color(0x3364B5F6),
     disabledDateBackground: Color(0x33757575),
@@ -50,9 +48,6 @@ class CalendarStyle {
     this.weekdayTextStyle,
     this.weekdayNames = defaultWeekdayNames,
     // Day cells
-    this.dayTextColor = const Color(0xDD000000),
-    this.disabledDayTextColor = const Color(0xFF9E9E9E),
-    this.dayTextSize = 16.0,
     // Today indicator
     this.todayBorderColor = const Color(0xFF2196F3),
     this.todayBorderWidth = 2.0,
@@ -70,8 +65,11 @@ class CalendarStyle {
     // Gestures
     this.flickDistanceThreshold = 0.05,
     this.flickMaxDuration = const Duration(milliseconds: 500),
-    this.dragBoxSizePercentage = 0.7,
+    this.dragBoxFraction = 0.7,
     this.dragProgressThreshold = 0.3,
+    this.nearEdgeMaxSpeedUp = 2,
+    this.restrictedNextTurn = 0.15,
+    this.restrictedPreviousTurn = 0.03,
   });
 
   // -- Background --
@@ -123,20 +121,6 @@ class CalendarStyle {
   /// Automatically rotated based on [FlipCalendar.firstDayOfWeek].
   final List<String> weekdayNames;
 
-  // -- Day Cells --
-
-  /// Text color for day numbers. The calendar does not draw with it; a day
-  /// builder can read it from this style.
-  final Color dayTextColor;
-
-  /// Text color for disabled days. The calendar does not draw with it; a day
-  /// builder can read it from this style.
-  final Color disabledDayTextColor;
-
-  /// Font size for day numbers. The calendar does not draw with it; a day
-  /// builder can read it from this style. Must be finite and not negative.
-  final double dayTextSize;
-
   // -- Today Indicator --
 
   /// Border color for today's cell.
@@ -178,15 +162,18 @@ class CalendarStyle {
 
   /// Easing curve for the part of a page turn that runs by itself: each turn
   /// of a navigation, and a swipe's turn after release, from where the
-  /// release leaves the page. While a swipe is dragged, the page follows the
-  /// finger through [dragCurve].
+  /// release leaves the page. While a swipe is dragged, the drag sets the
+  /// turn: a next-month swipe gripped on the page holds the page where it is
+  /// gripped, and any other swipe turns through the drag box ([dragCurve]).
   final Curve animationCurve;
 
-  /// Maps a swipe's progress, how far the finger has moved through the drag
-  /// box, to how far the page is turned while the finger is down. The default
-  /// keeps the page under the finger; a curve such as [Curves.decelerate]
-  /// turns it ahead of the finger. Does not affect when a released swipe
-  /// completes.
+  /// Maps the progress of a swipe that turns through the drag box, how far
+  /// the finger has moved through the box, to how far the page is turned
+  /// while the finger is down: a previous-month swipe, and a next-month swipe
+  /// gripped at or past the bound edge. The default turns the page in step
+  /// with the drag; a curve such as [Curves.decelerate] turns it ahead. A
+  /// next-month swipe gripped on the page holds the page where it is gripped
+  /// and takes no curve. Does not affect when a released swipe completes.
   final Curve dragCurve;
 
   /// Style for the page-turn effect (from `page_turn_animation` package).
@@ -206,13 +193,37 @@ class CalendarStyle {
   /// than zero.
   final Duration flickMaxDuration;
 
-  /// The fraction of the calendar's size along the swipe axis that a drag
-  /// covers to reach progress 1. Must be finite and greater than 0.
-  final double dragBoxSizePercentage;
+  /// The fraction of the calendar's size along the swipe axis that a swipe
+  /// turning through the drag box (see [dragCurve]) covers to turn the page
+  /// all the way. Must be finite and greater than 0.
+  final double dragBoxFraction;
 
-  /// The progress at or above which a released drag that is not a flick
-  /// completes the swipe. Must be greater than 0 and at most 1.
+  /// How far a released swipe that is not a flick must have come to
+  /// complete: this share of the way the finger takes to bring the paper it
+  /// holds to the bound edge for a swipe that holds the page (from its grip,
+  /// unless gripped nearer the edge than the page turn can hold: see
+  /// [nearEdgeMaxSpeedUp]), and this share of the drag box for one that turns
+  /// through it (see [dragCurve]). Must be greater than 0 and at most 1.
   final double dragProgressThreshold;
+
+  /// How many times the finger's speed a swipe toward the next month moves
+  /// the page at most when gripped nearer the bound edge than the page turn
+  /// can hold, a tenth of the page. Such a swipe holds the nearest paper the
+  /// page turn can hold, moving it faster than the finger, as much faster as
+  /// brings it to the bound edge with the finger, but no more than this. Must
+  /// be at least 1; [double.infinity] removes the limit.
+  final double nearEdgeMaxSpeedUp;
+
+  /// How far a swipe toward the next month that cannot land turns the page
+  /// before it stops, as a share of the turn; the page turns back on release.
+  /// 0 keeps the page flat. Must be at least 0 and at most 1.
+  final double restrictedNextTurn;
+
+  /// How far a swipe toward the previous month that cannot land turns the
+  /// page before it stops, as a share of the turn; the page turns back on
+  /// release. That turn shows the earlier page past the bound edge from its
+  /// start. 0 keeps the page flat. Must be at least 0 and at most 1.
+  final double restrictedPreviousTurn;
 
   // -- Defaults --
 
@@ -240,9 +251,6 @@ class CalendarStyle {
     double? weekdayHeaderHeight,
     TextStyle? weekdayTextStyle,
     List<String>? weekdayNames,
-    Color? dayTextColor,
-    Color? disabledDayTextColor,
-    double? dayTextSize,
     Color? todayBorderColor,
     double? todayBorderWidth,
     BorderRadius? todayBorderRadius,
@@ -255,8 +263,11 @@ class CalendarStyle {
     PageTurnStyle? pageTurnStyle,
     double? flickDistanceThreshold,
     Duration? flickMaxDuration,
-    double? dragBoxSizePercentage,
+    double? dragBoxFraction,
     double? dragProgressThreshold,
+    double? nearEdgeMaxSpeedUp,
+    double? restrictedNextTurn,
+    double? restrictedPreviousTurn,
   }) {
     return CalendarStyle(
       calendarBackground: calendarBackground ?? this.calendarBackground,
@@ -271,9 +282,6 @@ class CalendarStyle {
       weekdayHeaderHeight: weekdayHeaderHeight ?? this.weekdayHeaderHeight,
       weekdayTextStyle: weekdayTextStyle ?? this.weekdayTextStyle,
       weekdayNames: weekdayNames ?? this.weekdayNames,
-      dayTextColor: dayTextColor ?? this.dayTextColor,
-      disabledDayTextColor: disabledDayTextColor ?? this.disabledDayTextColor,
-      dayTextSize: dayTextSize ?? this.dayTextSize,
       todayBorderColor: todayBorderColor ?? this.todayBorderColor,
       todayBorderWidth: todayBorderWidth ?? this.todayBorderWidth,
       todayBorderRadius: todayBorderRadius ?? this.todayBorderRadius,
@@ -289,10 +297,13 @@ class CalendarStyle {
       flickDistanceThreshold:
           flickDistanceThreshold ?? this.flickDistanceThreshold,
       flickMaxDuration: flickMaxDuration ?? this.flickMaxDuration,
-      dragBoxSizePercentage:
-          dragBoxSizePercentage ?? this.dragBoxSizePercentage,
+      dragBoxFraction: dragBoxFraction ?? this.dragBoxFraction,
       dragProgressThreshold:
           dragProgressThreshold ?? this.dragProgressThreshold,
+      nearEdgeMaxSpeedUp: nearEdgeMaxSpeedUp ?? this.nearEdgeMaxSpeedUp,
+      restrictedNextTurn: restrictedNextTurn ?? this.restrictedNextTurn,
+      restrictedPreviousTurn:
+          restrictedPreviousTurn ?? this.restrictedPreviousTurn,
     );
   }
 
@@ -311,9 +322,6 @@ class CalendarStyle {
         other.weekdayHeaderHeight == weekdayHeaderHeight &&
         other.weekdayTextStyle == weekdayTextStyle &&
         listEquals(other.weekdayNames, weekdayNames) &&
-        other.dayTextColor == dayTextColor &&
-        other.disabledDayTextColor == disabledDayTextColor &&
-        other.dayTextSize == dayTextSize &&
         other.todayBorderColor == todayBorderColor &&
         other.todayBorderWidth == todayBorderWidth &&
         other.todayBorderRadius == todayBorderRadius &&
@@ -326,8 +334,11 @@ class CalendarStyle {
         other.pageTurnStyle == pageTurnStyle &&
         other.flickDistanceThreshold == flickDistanceThreshold &&
         other.flickMaxDuration == flickMaxDuration &&
-        other.dragBoxSizePercentage == dragBoxSizePercentage &&
-        other.dragProgressThreshold == dragProgressThreshold;
+        other.dragBoxFraction == dragBoxFraction &&
+        other.dragProgressThreshold == dragProgressThreshold &&
+        other.nearEdgeMaxSpeedUp == nearEdgeMaxSpeedUp &&
+        other.restrictedNextTurn == restrictedNextTurn &&
+        other.restrictedPreviousTurn == restrictedPreviousTurn;
   }
 
   @override
@@ -342,9 +353,6 @@ class CalendarStyle {
     weekdayHeaderHeight,
     weekdayTextStyle,
     Object.hashAll(weekdayNames),
-    dayTextColor,
-    disabledDayTextColor,
-    dayTextSize,
     todayBorderColor,
     todayBorderWidth,
     todayBorderRadius,
@@ -357,7 +365,10 @@ class CalendarStyle {
     pageTurnStyle,
     flickDistanceThreshold,
     flickMaxDuration,
-    dragBoxSizePercentage,
+    dragBoxFraction,
     dragProgressThreshold,
+    nearEdgeMaxSpeedUp,
+    restrictedNextTurn,
+    restrictedPreviousTurn,
   ]);
 }

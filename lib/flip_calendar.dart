@@ -1,16 +1,22 @@
 /// A customizable month calendar widget with page-turn animations
 /// and swipe gesture navigation.
 ///
-/// To use this package, also import `page_turn_animation` for
-/// [PageTurnEdge] and [PageTurnStyle] types.
+/// [PageTurnEdge] and [PageTurnStyle], which [FlipCalendar.boundEdge] and
+/// [CalendarStyle.pageTurnStyle] take, come from `page_turn_animation` and
+/// are exported here, so this import is the only one needed:
 ///
 /// ```dart
 /// import 'package:flip_calendar/flip_calendar.dart';
-/// import 'package:page_turn_animation/page_turn_animation.dart';
 /// ```
 ///
 /// @docImport 'package:page_turn_animation/page_turn_animation.dart';
+/// @docImport 'src/calendar/flip_calendar.dart';
+/// @docImport 'src/style/calendar_style.dart';
 library;
+
+// The page_turn_animation types this package's API takes
+export 'package:page_turn_animation/page_turn_animation.dart'
+    show PageTurnEdge, PageTurnStyle;
 
 // Animation
 export 'src/animation/multi_month_animation_mode.dart';
@@ -19,7 +25,6 @@ export 'src/calendar/calendar_day_data.dart';
 // Core
 export 'src/calendar/flip_calendar.dart';
 // Style
-export 'src/style/calendar_haptic_type.dart';
 export 'src/style/calendar_style.dart';
 // Utils
 export 'src/utils/date_constraint.dart';

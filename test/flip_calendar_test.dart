@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flip_calendar/flip_calendar.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,7 +66,8 @@ void main() {
       CalendarStyle style = const CalendarStyle(),
       DateTime? selectedDate,
       void Function(DateTime)? onDayTap,
-      void Function(CalendarHapticType)? onHapticFeedback,
+      VoidCallback? onNavigationRestricted,
+      ImageProvider? Function(DateTime month)? pageBack,
       int firstDayOfWeek = DateTime.sunday,
       PageTurnEdge boundEdge = PageTurnEdge.top,
       bool gesturesEnabled = true,
@@ -75,7 +78,8 @@ void main() {
         dayBuilder: dayBuilder ?? dayCell,
         selectedDate: selectedDate,
         onDayTap: onDayTap,
-        onHapticFeedback: onHapticFeedback,
+        onNavigationRestricted: onNavigationRestricted,
+        pageBack: pageBack,
         style: style,
         firstDayOfWeek: firstDayOfWeek,
         boundEdge: boundEdge,
@@ -124,10 +128,9 @@ void main() {
       }
 
       await tester.pumpWidget(
-        app(page(calendar(
-          calendarController: animated,
-          dayBuilder: futureCell,
-        ))),
+        app(
+          page(calendar(calendarController: animated, dayBuilder: futureCell)),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -152,12 +155,16 @@ void main() {
       var readyPixels = 0;
       var waitingPixels = 0;
       for (var i = 0; i < bytes.length; i += 4) {
-        if (bytes[i] == 0 && bytes[i + 1] == 255 &&
-            bytes[i + 2] == 0 && bytes[i + 3] == 255) {
+        if (bytes[i] == 0 &&
+            bytes[i + 1] == 255 &&
+            bytes[i + 2] == 0 &&
+            bytes[i + 3] == 255) {
           readyPixels++;
         }
-        if (bytes[i] == 255 && bytes[i + 1] == 0 &&
-            bytes[i + 2] == 255 && bytes[i + 3] == 255) {
+        if (bytes[i] == 255 &&
+            bytes[i + 1] == 0 &&
+            bytes[i + 2] == 255 &&
+            bytes[i + 3] == 255) {
           waitingPixels++;
         }
       }
@@ -172,10 +179,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(app(page(calendar())));
-      await tester.drag(
-        find.byType(FlipCalendar),
-        const Offset(0, -200),
-      );
+      await tester.drag(find.byType(FlipCalendar), const Offset(0, -200));
       expect(controller.isNavigating, isTrue);
 
       controllers.remove(controller);
@@ -941,7 +945,8 @@ void main() {
       ) async {
         await tester.pumpWidget(app(page(calendar())));
 
-        // 60 px of the 280 px drag box: progress 0.21, below 0.3.
+        // The first 20 px cross the drag threshold: gripped 180 px from the
+        // hinge, the drag's 40 px are short of 0.3 of that way, 54 px.
         await tester.drag(find.byType(FlipCalendar), const Offset(0, -60));
         await tester.pumpAndSettle();
 
@@ -951,7 +956,7 @@ void main() {
       testWidgets('a fling toward a forbidden month stays and signals once', (
         tester,
       ) async {
-        final haptics = <CalendarHapticType>[];
+        var restricted = 0;
         final bounded = createController(
           maxDate: DateConstraint.fixed(DateTime(2024, 6, 30)),
         );
@@ -961,7 +966,7 @@ void main() {
             page(
               calendar(
                 calendarController: bounded,
-                onHapticFeedback: haptics.add,
+                onNavigationRestricted: () => restricted++,
               ),
             ),
           ),
@@ -975,24 +980,24 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(bounded.currentMonth, equals(DateTime(2024, 6, 1)));
-        expect(haptics, equals([CalendarHapticType.navigationRestricted]));
+        expect(restricted, 1);
       });
 
-      testWidgets('a request made from the haptic callback is ignored', (
+      testWidgets('a request made from onNavigationRestricted is ignored', (
         tester,
       ) async {
         final bounded = createController(
           maxDate: DateConstraint.fixed(DateTime(2024, 6, 30)),
         );
-        var busyAtHaptic = false;
+        var busyWhenRestricted = false;
 
         await tester.pumpWidget(
           app(
             page(
               calendar(
                 calendarController: bounded,
-                onHapticFeedback: (_) {
-                  busyAtHaptic = bounded.isNavigating;
+                onNavigationRestricted: () {
+                  busyWhenRestricted = bounded.isNavigating;
                   bounded.goToMonth(DateTime(2024, 5, 1));
                 },
               ),
@@ -1007,7 +1012,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(busyAtHaptic, isTrue);
+        expect(busyWhenRestricted, isTrue);
         expect(bounded.currentMonth, equals(DateTime(2024, 6, 1)));
         expect(bounded.isNavigating, isFalse);
       });
@@ -1036,10 +1041,10 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
-        // 20 px cross the drag threshold, then 60 px: below the threshold,
-        // so the swipe does not move.
+        // 20 px cross the drag threshold, then 30 px: short of 0.3 of the way
+        // from the grip, 180 px from the hinge, so the swipe does not move.
         await gesture.moveBy(const Offset(0, -20));
-        await gesture.moveBy(const Offset(0, -60));
+        await gesture.moveBy(const Offset(0, -30));
         controller.goToMonth(DateTime(2024, 9, 1));
         await gesture.up();
         await tester.pumpAndSettle();
@@ -1136,10 +1141,10 @@ void main() {
 
       testWidgets('a drag that begins after a request, before the rebuild, '
           'is ignored', (tester) async {
-        final haptics = <CalendarHapticType>[];
+        var restricted = 0;
 
         await tester.pumpWidget(
-          app(page(calendar(onHapticFeedback: haptics.add))),
+          app(page(calendar(onNavigationRestricted: () => restricted++))),
         );
 
         controller.goToMonth(DateTime(2024, 7, 1));
@@ -1153,14 +1158,14 @@ void main() {
 
         expect(controller.currentMonth, equals(DateTime(2024, 7, 1)));
         expect(controller.isNavigating, isFalse);
-        expect(haptics, isEmpty);
+        expect(restricted, 0);
       });
     });
 
     group('swipes out of a forbidden month', () {
       testWidgets('a fling toward the allowed range lands on its nearest '
-          'month, with no haptic', (tester) async {
-        final haptics = <CalendarHapticType>[];
+          'month, reporting no restriction', (tester) async {
+        var restricted = 0;
         final december = createController(initialMonth: DateTime(2024, 12, 1));
 
         await tester.pumpWidget(
@@ -1168,7 +1173,7 @@ void main() {
             page(
               calendar(
                 calendarController: december,
-                onHapticFeedback: haptics.add,
+                onNavigationRestricted: () => restricted++,
               ),
             ),
           ),
@@ -1184,12 +1189,12 @@ void main() {
 
         expect(december.currentMonth, equals(DateTime(2024, 9, 1)));
         expect(find.byKey(const Key('9-1')), findsOneWidget);
-        expect(haptics, isEmpty);
+        expect(restricted, 0);
       });
 
       testWidgets('a fling away from the allowed range stays and signals '
           'once', (tester) async {
-        final haptics = <CalendarHapticType>[];
+        var restricted = 0;
         final december = createController(initialMonth: DateTime(2024, 12, 1));
 
         await tester.pumpWidget(
@@ -1197,7 +1202,7 @@ void main() {
             page(
               calendar(
                 calendarController: december,
-                onHapticFeedback: haptics.add,
+                onNavigationRestricted: () => restricted++,
               ),
             ),
           ),
@@ -1212,12 +1217,14 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(december.currentMonth, equals(DateTime(2024, 12, 1)));
-        expect(haptics, equals([CalendarHapticType.navigationRestricted]));
+        expect(restricted, 1);
       });
     });
 
-    testWidgets('a request past a bound stays, with no haptic', (tester) async {
-      final haptics = <CalendarHapticType>[];
+    testWidgets('a request past a bound stays, reporting no restriction', (
+      tester,
+    ) async {
+      var restricted = 0;
       final bounded = createController(
         maxDate: DateConstraint.fixed(DateTime(2024, 6, 30)),
       );
@@ -1227,7 +1234,7 @@ void main() {
           page(
             calendar(
               calendarController: bounded,
-              onHapticFeedback: haptics.add,
+              onNavigationRestricted: () => restricted++,
             ),
           ),
         ),
@@ -1237,7 +1244,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(bounded.currentMonth, equals(DateTime(2024, 6, 1)));
-      expect(haptics, isEmpty);
+      expect(restricted, 0);
     });
 
     group('animated swipes', () {
@@ -1293,7 +1300,91 @@ void main() {
         expect(animated.isNavigating, isFalse);
       });
 
-      testWidgets('the page follows the finger linearly', (tester) async {
+      testWidgets('a next-month swipe turns the page by the drag progress of '
+          'the paper it grips, drawn with that finger start; a navigation '
+          'after it turns from the free edge', (tester) async {
+        final animated = createController(animationsEnabled: true);
+
+        await tester.pumpWidget(
+          app(page(calendar(calendarController: animated))),
+        );
+
+        // The page is 400 px long, bound at its top edge, y 0. The first move
+        // crosses the drag threshold and is discarded: the drag is gripped
+        // where it is accepted, 200 px from the hinge.
+        final gesture = await tester.startGesture(const Offset(150, 220));
+        await gesture.moveBy(const Offset(0, -20));
+
+        final drag = PageTurnDragProgress(pageLength: 400, fingerStart: 0.5);
+        var expected = 0.0;
+        for (final travel in [50.0, 100.0, 150.0]) {
+          await gesture.moveTo(Offset(150, 200 - travel));
+          await tester.pump();
+          await tester.pump();
+          expected = drag.progressFor(travel, current: expected);
+
+          final turn = tester.widget<PageTurnAnimation>(
+            find.byType(PageTurnAnimation),
+          );
+          expect(turn.fingerStart, 0.5);
+          expect(turn.animation.value, expected);
+        }
+
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(animated.currentMonth, DateTime(2024, 7, 1));
+
+        animated.nextMonth();
+        await tester.pump();
+        await tester.pump();
+        expect(
+          tester
+              .widget<PageTurnAnimation>(find.byType(PageTurnAnimation))
+              .fingerStart,
+          PageTurnInputs.standardFingerStart,
+        );
+        await tester.pumpAndSettle();
+      });
+
+      testWidgets('a grip nearer the hinge than the package can hold, within '
+          'nearEdgeMaxSpeedUp, moves the nearest paper it can, reaching the '
+          'hinge with the finger', (tester) async {
+        final animated = createController(animationsEnabled: true);
+
+        await tester.pumpWidget(
+          app(page(calendar(calendarController: animated))),
+        );
+
+        // Gripped 25 px from the hinge, within the tenth of the 400 px page
+        // the package cannot hold: the paper 40 px from it moves 40 / 25
+        // times as far as the finger, within the default 2.
+        final gesture = await tester.startGesture(const Offset(150, 45));
+        await gesture.moveBy(const Offset(0, -20));
+        await gesture.moveTo(const Offset(150, 12.5));
+        await tester.pump();
+        await tester.pump();
+
+        final drag = PageTurnDragProgress(
+          pageLength: 400,
+          fingerStart: PageTurnInputs.maxFingerStart,
+        );
+        var turn = tester.widget<PageTurnAnimation>(
+          find.byType(PageTurnAnimation),
+        );
+        expect(turn.fingerStart, PageTurnInputs.maxFingerStart);
+        expect(turn.animation.value, closeTo(drag.progressFor(20), 1e-9));
+
+        await gesture.moveTo(const Offset(150, 0));
+        await tester.pump();
+        turn = tester.widget<PageTurnAnimation>(find.byType(PageTurnAnimation));
+        expect(turn.animation.value, closeTo(drag.hingeProgress, 1e-9));
+
+        await gesture.up();
+        await tester.pumpAndSettle();
+      });
+
+      testWidgets('a previous-month drag turns the page linearly through the '
+          'drag box', (tester) async {
         final animated = createController(animationsEnabled: true);
 
         await tester.pumpWidget(
@@ -1303,16 +1394,18 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
-        // The first move crosses the drag threshold and is discarded.
-        await gesture.moveBy(const Offset(0, -20));
-        await gesture.moveBy(const Offset(0, -20));
+        // The first move crosses the drag threshold and is discarded. The
+        // incoming page is captured a frame after it is built.
+        await gesture.moveBy(const Offset(0, 20));
+        await gesture.moveBy(const Offset(0, 20));
         await tester.pump();
         await tester.pump();
-        await gesture.moveBy(const Offset(0, -56));
+        await tester.pump();
+        await gesture.moveBy(const Offset(0, 56));
         await tester.pump();
 
         // 76 px of a 280 px drag box (0.7 of 400 px), drawn as is, not
-        // through the default decelerating curve.
+        // through the default decelerating animationCurve.
         final turn = tester.widget<PageTurnAnimation>(
           find.byType(PageTurnAnimation),
         );
@@ -1322,9 +1415,8 @@ void main() {
         await tester.pumpAndSettle();
       });
 
-      testWidgets("the page follows the finger through the style's dragCurve", (
-        tester,
-      ) async {
+      testWidgets("a previous-month drag turns the page through the style's "
+          'dragCurve', (tester) async {
         final animated = createController(animationsEnabled: true);
 
         await tester.pumpWidget(
@@ -1341,12 +1433,14 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
-        // The first move crosses the drag threshold and is discarded.
-        await gesture.moveBy(const Offset(0, -20));
-        await gesture.moveBy(const Offset(0, -20));
+        // The first move crosses the drag threshold and is discarded. The
+        // incoming page is captured a frame after it is built.
+        await gesture.moveBy(const Offset(0, 20));
+        await gesture.moveBy(const Offset(0, 20));
         await tester.pump();
         await tester.pump();
-        await gesture.moveBy(const Offset(0, -56));
+        await tester.pump();
+        await gesture.moveBy(const Offset(0, 56));
         await tester.pump();
 
         final turn = tester.widget<PageTurnAnimation>(
@@ -1418,8 +1512,8 @@ void main() {
             ),
           );
 
-          // 76 px of the 280 px drag box: below the threshold, so the page
-          // turns back from 76 / 280.
+          // Gripped 180 px from the hinge, 36 px of travel are short of 0.3
+          // of that way, 54 px: the page turns back from where it is.
           final gesture = await tester.startGesture(
             tester.getCenter(find.byType(FlipCalendar)),
           );
@@ -1428,22 +1522,24 @@ void main() {
           await gesture.moveBy(const Offset(0, -20));
           await tester.pump();
           await tester.pump();
-          await gesture.moveBy(const Offset(0, -56));
+          await gesture.moveBy(const Offset(0, -16));
           await tester.pump();
+          final turn = find.byType(PageTurnAnimation);
+          final atRelease = tester
+              .widget<PageTurnAnimation>(turn)
+              .animation
+              .value;
           await gesture.up();
 
           // The turn back's first frame, then half its duration: the part of
-          // 600 ms that 76 / 280 of a turn takes.
+          // 600 ms that the turn at release takes.
           await tester.pump();
-          final back = const Duration(milliseconds: 600) * (76 / 280);
+          final back = const Duration(milliseconds: 600) * atRelease;
           await tester.pump(back ~/ 2);
 
-          final turn = tester.widget<PageTurnAnimation>(
-            find.byType(PageTurnAnimation),
-          );
           expect(
-            turn.animation.value,
-            closeTo(76 / 280 * (1 - Curves.easeIn.transform(0.5)), 0.001),
+            tester.widget<PageTurnAnimation>(turn).animation.value,
+            closeTo(atRelease * (1 - Curves.easeIn.transform(0.5)), 0.001),
           );
 
           await tester.pumpAndSettle();
@@ -1451,10 +1547,9 @@ void main() {
         },
       );
 
-      testWidgets('a restricted drag lifts the page no more than 0.02, even '
-          'before the next frame, over the month it cannot reach', (
-        tester,
-      ) async {
+      testWidgets('a restricted drag toward the next month turns the page no '
+          'further than 0.15, even before the next frame, over the month it '
+          'cannot reach', (tester) async {
         final animated = createController(
           maxDate: DateConstraint.fixed(DateTime(2024, 6, 30)),
           animationsEnabled: true,
@@ -1476,7 +1571,11 @@ void main() {
         final turn = tester.widget<PageTurnAnimation>(
           find.byType(PageTurnAnimation),
         );
-        expect(turn.animation.value, lessThanOrEqualTo(0.02));
+        // 200 px of travel from a grip 180 px from the hinge would turn the
+        // page all the way.
+        expect(turn.animation.value, 0.15);
+        // Lifted from its grip, 180 px from the hinge.
+        expect(turn.fingerStart, closeTo(0.55, 1e-9));
         // Under the lifted page (an image of June) is July.
         expect(find.byKey(const Key('7-1')), findsOneWidget);
         expect(find.byKey(const Key('6-15')), findsNothing);
@@ -1488,6 +1587,139 @@ void main() {
         expect(animated.isNavigating, isFalse);
       });
 
+      testWidgets('a restricted drag toward the previous month turns the page '
+          'no further than 0.03, through the drag box', (tester) async {
+        final animated = createController(
+          minDate: DateConstraint.fixed(DateTime(2024, 6, 1)),
+          animationsEnabled: true,
+        );
+
+        await tester.pumpWidget(
+          app(page(calendar(calendarController: animated))),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(FlipCalendar)),
+        );
+        // The first move crosses the drag threshold and is discarded. The
+        // incoming page is captured a frame after it is built.
+        await gesture.moveBy(const Offset(0, 20));
+        await gesture.moveBy(const Offset(0, 100));
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+        await gesture.moveBy(const Offset(0, 100));
+        await tester.pump();
+
+        final turn = tester.widget<PageTurnAnimation>(
+          find.byType(PageTurnAnimation),
+        );
+        // 200 px of the 280 px drag box would turn the page 0.71 of the way.
+        expect(turn.animation.value, 0.03);
+        expect(turn.direction, PageTurnDirection.backward);
+        expect(turn.fingerStart, PageTurnInputs.standardFingerStart);
+
+        await gesture.up();
+        await tester.pumpAndSettle();
+
+        expect(animated.currentMonth, equals(DateTime(2024, 6, 1)));
+        expect(animated.isNavigating, isFalse);
+      });
+
+      testWidgets("restricted drags turn the page no further than the style's "
+          'restrictedNextTurn and restrictedPreviousTurn', (tester) async {
+        final animated = createController(
+          minDate: DateConstraint.fixed(DateTime(2024, 6, 1)),
+          maxDate: DateConstraint.fixed(DateTime(2024, 6, 30)),
+          animationsEnabled: true,
+        );
+        const style = CalendarStyle(
+          restrictedNextTurn: 0.4,
+          restrictedPreviousTurn: 0.1,
+        );
+
+        await tester.pumpWidget(
+          app(page(calendar(calendarController: animated, style: style))),
+        );
+
+        // Each swipe would turn the page past its limit: 200 px from a grip
+        // 180 px from the hinge, or 200 px of the 280 px drag box.
+        Future<double> turnBeforeRelease(Offset toward) async {
+          final gesture = await tester.startGesture(
+            tester.getCenter(find.byType(FlipCalendar)),
+          );
+          await gesture.moveBy(toward * 20);
+          await gesture.moveBy(toward * 100);
+          await tester.pump();
+          await tester.pump();
+          await tester.pump();
+          await gesture.moveBy(toward * 100);
+          await tester.pump();
+          final turned = tester
+              .widget<PageTurnAnimation>(find.byType(PageTurnAnimation))
+              .animation
+              .value;
+          await gesture.up();
+          await tester.pumpAndSettle();
+          return turned;
+        }
+
+        expect(await turnBeforeRelease(const Offset(0, -1)), 0.4);
+        expect(await turnBeforeRelease(const Offset(0, 1)), 0.1);
+        expect(animated.currentMonth, equals(DateTime(2024, 6, 1)));
+      });
+
+      testWidgets('a grip moving over the flat page rebuilds no day cell, and '
+          'the page turns from the new grip', (tester) async {
+        final animated = createController(animationsEnabled: true);
+        var builds = 0;
+
+        await tester.pumpWidget(
+          app(
+            page(
+              calendar(
+                calendarController: animated,
+                dayBuilder: (_, data) {
+                  builds++;
+                  return Text('${data.date.day}');
+                },
+              ),
+            ),
+          ),
+        );
+
+        // Gripped 180 px from the hinge; the page turns, then lies flat again
+        // with the finger back at the grip.
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(FlipCalendar)),
+        );
+        await gesture.moveBy(const Offset(0, -20));
+        await tester.pump();
+        await gesture.moveBy(const Offset(0, -30));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        await gesture.moveBy(const Offset(0, 30));
+        await tester.pump();
+
+        // 100 px past the grip, the grip following the finger to 280 px.
+        builds = 0;
+        for (var i = 0; i < 10; i++) {
+          await gesture.moveBy(const Offset(0, 10));
+          await tester.pump();
+        }
+        expect(builds, 0);
+
+        await gesture.moveBy(const Offset(0, -40));
+        await tester.pump();
+        final turn = tester.widget<PageTurnAnimation>(
+          find.byType(PageTurnAnimation),
+        );
+        expect(turn.fingerStart, closeTo(1 - 280 / 400, 1e-9));
+
+        await gesture.up();
+        await tester.pumpAndSettle();
+      });
+
       testWidgets('a drag below the threshold snaps back', (tester) async {
         final animated = createController(animationsEnabled: true);
 
@@ -1495,7 +1727,8 @@ void main() {
           app(page(calendar(calendarController: animated))),
         );
 
-        // 60 px of the 280 px drag box: progress 0.21, below 0.3.
+        // The first 20 px cross the drag threshold: gripped 180 px from the
+        // hinge, the drag's 40 px are short of 0.3 of that way, 54 px.
         await tester.drag(find.byType(FlipCalendar), const Offset(0, -60));
         await tester.pumpAndSettle();
 
@@ -1528,12 +1761,17 @@ void main() {
         await gesture.moveBy(const Offset(0, -70));
         await tester.pump();
         await tester.pump();
-        // 140 px of the 280 px drag box: released at 0.5, half the turn left.
         await gesture.moveBy(const Offset(0, -70));
+        final atRelease = tester
+            .widget<PageTurnAnimation>(find.byType(PageTurnAnimation))
+            .animation
+            .value;
         await gesture.up();
         await tester.pump();
 
-        await tester.pump(const Duration(milliseconds: 450));
+        // The rest of the turn takes its share of the second.
+        final rest = const Duration(seconds: 1) * (1 - atRelease);
+        await tester.pump(rest - const Duration(milliseconds: 50));
         expect(find.byType(PageTurnAnimation), findsOneWidget);
         await tester.pump(const Duration(milliseconds: 100));
         expect(find.byType(PageTurnAnimation), findsNothing);
@@ -1550,8 +1788,10 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
+        // Gripped 180 px from the hinge, 30 px of travel are short of 0.3 of
+        // that way, 54 px.
         await gesture.moveBy(const Offset(0, -20));
-        await gesture.moveBy(const Offset(0, -60));
+        await gesture.moveBy(const Offset(0, -30));
         await tester.pump();
         await tester.pump();
         final turn = find.byType(PageTurnAnimation);
@@ -1576,7 +1816,7 @@ void main() {
       testWidgets('a fling toward a forbidden month stays and signals once', (
         tester,
       ) async {
-        final haptics = <CalendarHapticType>[];
+        var restricted = 0;
         final animated = createController(
           maxDate: DateConstraint.fixed(DateTime(2024, 6, 30)),
           animationsEnabled: true,
@@ -1587,7 +1827,7 @@ void main() {
             page(
               calendar(
                 calendarController: animated,
-                onHapticFeedback: haptics.add,
+                onNavigationRestricted: () => restricted++,
               ),
             ),
           ),
@@ -1602,7 +1842,7 @@ void main() {
 
         expect(animated.currentMonth, equals(DateTime(2024, 6, 1)));
         expect(animated.isNavigating, isFalse);
-        expect(haptics, equals([CalendarHapticType.navigationRestricted]));
+        expect(restricted, 1);
       });
 
       testWidgets('a slow drag past the threshold turns the page', (
@@ -1614,8 +1854,9 @@ void main() {
           app(page(calendar(calendarController: animated))),
         );
 
-        // About 33 px/s, too slow for a flick, so the progress decides:
-        // 200/280, above the 0.3 threshold.
+        // About 33 px/s, too slow for a flick, so the distance decides: past
+        // the touch slop the drag travels about 180 px from a grip about
+        // 180 px from the hinge, past 0.3 of that way.
         await tester.timedDrag(
           find.byType(FlipCalendar),
           const Offset(0, -200),
@@ -1706,12 +1947,19 @@ void main() {
         await gesture.moveBy(const Offset(0, -20));
         await tester.pump();
         await tester.pump();
-        // 340 px in all, more than the 280 px drag box, so the page is fully
-        // turned at release.
+        // 640 px of travel from a grip 180 px from the hinge, past where the
+        // turn ends: the page is fully turned at release.
         for (var move = 0; move < 8; move++) {
-          await gesture.moveBy(const Offset(0, -40));
+          await gesture.moveBy(const Offset(0, -80));
           await tester.pump();
         }
+        expect(
+          tester
+              .widget<PageTurnAnimation>(find.byType(PageTurnAnimation))
+              .animation
+              .value,
+          1,
+        );
         await gesture.up();
         await tester.pumpAndSettle();
 
@@ -3030,7 +3278,8 @@ void main() {
         final gesture = await tester.startGesture(
           tester.getCenter(find.byType(FlipCalendar)),
         );
-        // 150 px: past the progress threshold.
+        // The second move crosses the touch slop: gripped 170 px from the
+        // hinge, the eight after it travel 120 px, past 0.3 of that way.
         for (var i = 0; i < 10; i++) {
           await gesture.moveBy(const Offset(0, -15));
         }
@@ -3118,6 +3367,305 @@ void main() {
         expect(controller.currentMonth, equals(DateTime(2024, 6, 1)));
         expect(controller.isNavigating, isFalse);
       });
+
+      group('with the page held up', () {
+        /// Starts a swipe toward the next month on the calendar in the tree
+        /// and holds its page lifted from a grip 180 px from the hinge.
+        Future<TestGesture> holdLifted(WidgetTester tester) async {
+          final gesture = await tester.startGesture(
+            tester.getCenter(find.byType(FlipCalendar)),
+          );
+          await gesture.moveBy(const Offset(0, -20));
+          await tester.pump();
+          await gesture.moveBy(const Offset(0, -40));
+          await tester.pump();
+          await tester.pump();
+          await gesture.moveBy(const Offset(0, -10));
+          await tester.pump();
+          final turn = tester.widget<PageTurnAnimation>(
+            find.byType(PageTurnAnimation),
+          );
+          expect(turn.animation.value, greaterThan(0));
+          expect(turn.fingerStart, closeTo(0.55, 1e-9));
+          return gesture;
+        }
+
+        /// Releases [gesture] and checks the swipe ended without moving
+        /// [calendarController] off June.
+        Future<void> endsInJune(
+          WidgetTester tester,
+          TestGesture gesture,
+          CalendarController calendarController,
+        ) async {
+          expect(tester.takeException(), isNull);
+          await gesture.up();
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(calendarController.currentMonth, equals(DateTime(2024, 6, 1)));
+          expect(calendarController.isNavigating, isFalse);
+        }
+
+        testWidgets('ends without moving when the calendar takes another '
+            'controller', (tester) async {
+          final animated = createController(animationsEnabled: true);
+          final other = createController(animationsEnabled: true);
+          await tester.pumpWidget(
+            app(page(calendar(calendarController: animated))),
+          );
+          final gesture = await holdLifted(tester);
+
+          await tester.pumpWidget(
+            app(page(calendar(calendarController: other))),
+          );
+
+          await endsInJune(tester, gesture, animated);
+          expect(other.currentMonth, equals(DateTime(2024, 6, 1)));
+          expect(other.isNavigating, isFalse);
+          expect(find.byKey(const Key('6-15')), findsOneWidget);
+        });
+
+        testWidgets('ends without moving when the calendar moves to another '
+            'place by its GlobalKey', (tester) async {
+          final animated = createController(animationsEnabled: true);
+          final key = GlobalKey();
+          Widget layout({required bool first}) {
+            final held = page(
+              KeyedSubtree(
+                key: key,
+                child: calendar(calendarController: animated),
+              ),
+            );
+            final empty = page(const SizedBox());
+            return app(Row(children: first ? [held, empty] : [empty, held]));
+          }
+
+          await tester.pumpWidget(layout(first: true));
+          final gesture = await holdLifted(tester);
+
+          await tester.pumpWidget(layout(first: false));
+
+          await endsInJune(tester, gesture, animated);
+          expect(find.byKey(const Key('6-15')), findsOneWidget);
+        });
+
+        testWidgets('ends without moving when the calendar moves deeper by '
+            'its GlobalKey', (tester) async {
+          final animated = createController(animationsEnabled: true);
+          final key = GlobalKey();
+          Widget held() => KeyedSubtree(
+            key: key,
+            child: calendar(calendarController: animated),
+          );
+
+          await tester.pumpWidget(app(page(held())));
+          final gesture = await holdLifted(tester);
+
+          await tester.pumpWidget(
+            app(
+              page(
+                Padding(
+                  padding: const EdgeInsets.all(1),
+                  child: Center(child: held()),
+                ),
+              ),
+            ),
+          );
+
+          await endsInJune(tester, gesture, animated);
+          expect(find.byKey(const Key('6-15')), findsOneWidget);
+        });
+
+        testWidgets('ends without moving when the calendar is removed', (
+          tester,
+        ) async {
+          final animated = createController(animationsEnabled: true);
+          await tester.pumpWidget(
+            app(page(calendar(calendarController: animated))),
+          );
+          final gesture = await holdLifted(tester);
+
+          await tester.pumpWidget(app(page(const SizedBox())));
+
+          await endsInJune(tester, gesture, animated);
+          expect(find.byType(FlipCalendar), findsNothing);
+        });
+
+        testWidgets('turns back when the bound edge changes', (tester) async {
+          final animated = createController(animationsEnabled: true);
+          await tester.pumpWidget(
+            app(page(calendar(calendarController: animated))),
+          );
+          final gesture = await holdLifted(tester);
+
+          await tester.pumpWidget(
+            app(
+              page(
+                calendar(
+                  calendarController: animated,
+                  boundEdge: PageTurnEdge.bottom,
+                ),
+              ),
+            ),
+          );
+
+          await endsInJune(tester, gesture, animated);
+          expect(find.byKey(const Key('6-15')), findsOneWidget);
+        });
+      });
+    });
+
+    group('the page back', () {
+      tearDown(() => PaintingBinding.instance.imageCache.clear());
+
+      /// Pumps frames until a page turns, and returns its turn.
+      Future<PageTurnAnimation> turning(WidgetTester tester) async {
+        for (var frame = 0; frame < 5; frame++) {
+          await tester.pump();
+          final turns = find.byType(PageTurnAnimation);
+          if (turns.evaluate().isNotEmpty) {
+            return tester.widget<PageTurnAnimation>(turns);
+          }
+        }
+        throw StateError('no page turned');
+      }
+
+      Future<ui.Image> image(WidgetTester tester) async {
+        final made = (await tester.runAsync(
+          () => createTestImage(width: 4, height: 4),
+        ))!;
+        addTearDown(made.dispose);
+        return made;
+      }
+
+      testWidgets('a turn without pageBack draws the plain back', (
+        tester,
+      ) async {
+        final animated = createController(animationsEnabled: true);
+        await tester.pumpWidget(
+          app(page(calendar(calendarController: animated))),
+        );
+
+        animated.nextMonth();
+
+        expect((await turning(tester)).backImage, isNull);
+        await tester.pumpAndSettle();
+      });
+
+      testWidgets('pageBack is asked for the month whose page turns, and its '
+          'image is drawn on that turn', (tester) async {
+        final april = await image(tester);
+        final may = await image(tester);
+        final asked = <DateTime>[];
+        final animated = createController(animationsEnabled: true);
+        await tester.pumpWidget(
+          app(
+            page(
+              calendar(
+                calendarController: animated,
+                pageBack: (month) {
+                  asked.add(month);
+                  return _TestBack({4: april, 5: may}[month.month]);
+                },
+              ),
+            ),
+          ),
+        );
+
+        // Back from June: May's page turns back over June.
+        animated.previousMonth();
+        expect((await turning(tester)).backImage!.isCloneOf(may), isTrue);
+        await tester.pumpAndSettle();
+
+        // Back from May: April's page.
+        animated.previousMonth();
+        expect((await turning(tester)).backImage!.isCloneOf(april), isTrue);
+        await tester.pumpAndSettle();
+
+        // On from April: April's page turns away.
+        animated.nextMonth();
+        expect((await turning(tester)).backImage!.isCloneOf(april), isTrue);
+        await tester.pumpAndSettle();
+
+        expect(asked, [
+          DateTime(2024, 5, 1),
+          DateTime(2024, 4, 1),
+          DateTime(2024, 4, 1),
+        ]);
+      });
+
+      testWidgets('a back that loads after its turn starts is not drawn on '
+          'that turn', (tester) async {
+        final back = await image(tester);
+        final loaded = Completer<void>();
+        final animated = createController(animationsEnabled: true);
+        Widget tree() => app(
+          page(
+            calendar(
+              calendarController: animated,
+              pageBack: (_) => _TestBack(back, loaded: loaded.future),
+            ),
+          ),
+        );
+        await tester.pumpWidget(tree());
+
+        animated.nextMonth();
+        expect((await turning(tester)).backImage, isNull);
+
+        // Loaded mid-turn, then the calendar rebuilt: the turn stays plain.
+        loaded.complete();
+        await tester.pump();
+        await tester.pumpWidget(tree());
+        final turn = tester.widget<PageTurnAnimation>(
+          find.byType(PageTurnAnimation),
+        );
+        expect(turn.backImage, isNull);
+        await tester.pumpAndSettle();
+      });
+
+      testWidgets('a back that fails to load is reported, and the turn draws '
+          'the plain back', (tester) async {
+        final animated = createController(animationsEnabled: true);
+        await tester.pumpWidget(
+          app(
+            page(
+              calendar(
+                calendarController: animated,
+                pageBack: (_) => _TestBack(null),
+              ),
+            ),
+          ),
+        );
+
+        animated.nextMonth();
+
+        expect((await turning(tester)).backImage, isNull);
+        expect(tester.takeException(), isA<StateError>());
+        await tester.pumpAndSettle();
+        expect(animated.currentMonth, equals(DateTime(2024, 7, 1)));
+      });
+
+      testWidgets('a pageBack that throws is reported, and the turn draws the '
+          'plain back', (tester) async {
+        final animated = createController(animationsEnabled: true);
+        await tester.pumpWidget(
+          app(
+            page(
+              calendar(
+                calendarController: animated,
+                pageBack: (_) => throw StateError('no back'),
+              ),
+            ),
+          ),
+        );
+
+        animated.nextMonth();
+
+        expect(tester.takeException(), isA<StateError>());
+        expect((await turning(tester)).backImage, isNull);
+        await tester.pumpAndSettle();
+        expect(animated.currentMonth, equals(DateTime(2024, 7, 1)));
+        expect(animated.isNavigating, isFalse);
+      });
     });
 
     group('validation', () {
@@ -3181,14 +3729,14 @@ void main() {
         );
       });
 
-      testWidgets('rejects a dragBoxSizePercentage of 0', (tester) async {
+      testWidgets('rejects a dragBoxFraction of 0', (tester) async {
         expect(
           await buildError(
             tester,
-            style: const CalendarStyle(dragBoxSizePercentage: 0.0),
+            style: const CalendarStyle(dragBoxFraction: 0.0),
           ),
           rangeErrorWith(
-            'style.dragBoxSizePercentage',
+            'style.dragBoxFraction',
             0.0,
             message: 'Must be greater than 0',
           ),
@@ -3223,6 +3771,32 @@ void main() {
         );
       });
 
+      for (final value in [0.5, double.nan]) {
+        testWidgets('rejects a nearEdgeMaxSpeedUp of $value', (tester) async {
+          expect(
+            await buildError(
+              tester,
+              style: CalendarStyle(nearEdgeMaxSpeedUp: value),
+            ),
+            rangeErrorWith('style.nearEdgeMaxSpeedUp', value, start: 1),
+          );
+        });
+      }
+
+      testWidgets('accepts a nearEdgeMaxSpeedUp of 1 and of infinity', (
+        tester,
+      ) async {
+        for (final value in [1.0, double.infinity]) {
+          expect(
+            await buildError(
+              tester,
+              style: CalendarStyle(nearEdgeMaxSpeedUp: value),
+            ),
+            isNull,
+          );
+        }
+      });
+
       testWidgets('accepts a dragProgressThreshold of exactly 1', (
         tester,
       ) async {
@@ -3233,6 +3807,63 @@ void main() {
           ),
           isNull,
         );
+      });
+
+      for (final value in [-0.1, 1.1, double.nan]) {
+        testWidgets('rejects a restrictedNextTurn of $value', (tester) async {
+          expect(
+            await buildError(
+              tester,
+              style: CalendarStyle(restrictedNextTurn: value),
+            ),
+            rangeErrorWith('style.restrictedNextTurn', value, start: 0, end: 1),
+          );
+        });
+      }
+
+      testWidgets('accepts a restrictedNextTurn of 0 and of 1', (tester) async {
+        for (final value in [0.0, 1.0]) {
+          expect(
+            await buildError(
+              tester,
+              style: CalendarStyle(restrictedNextTurn: value),
+            ),
+            isNull,
+          );
+        }
+      });
+
+      for (final value in [-0.1, 1.1, double.nan]) {
+        testWidgets('rejects a restrictedPreviousTurn of $value', (
+          tester,
+        ) async {
+          expect(
+            await buildError(
+              tester,
+              style: CalendarStyle(restrictedPreviousTurn: value),
+            ),
+            rangeErrorWith(
+              'style.restrictedPreviousTurn',
+              value,
+              start: 0,
+              end: 1,
+            ),
+          );
+        });
+      }
+
+      testWidgets('accepts a restrictedPreviousTurn of 0 and of 1', (
+        tester,
+      ) async {
+        for (final value in [0.0, 1.0]) {
+          expect(
+            await buildError(
+              tester,
+              style: CalendarStyle(restrictedPreviousTurn: value),
+            ),
+            isNull,
+          );
+        }
       });
 
       testWidgets('rejects weekdayNames longer than 7', (tester) async {
@@ -3317,16 +3948,6 @@ void main() {
             style: const CalendarStyle(gridLineWidth: double.nan),
           ),
           rangeErrorWith('style.gridLineWidth', isNaN, start: 0),
-        );
-      });
-
-      testWidgets('rejects a negative dayTextSize', (tester) async {
-        expect(
-          await buildError(
-            tester,
-            style: const CalendarStyle(dayTextSize: -1.0),
-          ),
-          rangeErrorWith('style.dayTextSize', -1.0, start: 0),
         );
       });
 
@@ -3456,13 +4077,13 @@ void main() {
         );
       });
 
-      testWidgets('rejects an infinite dragBoxSizePercentage', (tester) async {
+      testWidgets('rejects an infinite dragBoxFraction', (tester) async {
         expect(
           await buildError(
             tester,
-            style: const CalendarStyle(dragBoxSizePercentage: double.infinity),
+            style: const CalendarStyle(dragBoxFraction: double.infinity),
           ),
-          mustBeFinite('style.dragBoxSizePercentage'),
+          mustBeFinite('style.dragBoxFraction'),
         );
       });
 
@@ -3515,4 +4136,32 @@ class _RepaintOn extends CustomPainter {
 
   @override
   bool shouldRepaint(_RepaintOn oldDelegate) => false;
+}
+
+/// A page back that loads [image], at once or once [loaded] completes, or
+/// fails to load when [image] is null.
+class _TestBack extends ImageProvider<_TestBack> {
+  _TestBack(this.image, {this.loaded});
+
+  final ui.Image? image;
+  final Future<void>? loaded;
+
+  @override
+  Future<_TestBack> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(_TestBack key, ImageDecoderCallback decode) {
+    final image = this.image;
+    if (image == null) {
+      return OneFrameImageStreamCompleter(
+        Future<ImageInfo>.error(StateError('no back')),
+      );
+    }
+    final info = ImageInfo(image: image.clone());
+    final loaded = this.loaded;
+    return OneFrameImageStreamCompleter(
+      loaded == null ? SynchronousFuture(info) : loaded.then((_) => info),
+    );
+  }
 }

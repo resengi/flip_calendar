@@ -8,7 +8,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:page_turn_animation/page_turn_animation.dart';
 
 import '../animation/calendar_gesture_handler.dart';
-import '../style/calendar_haptic_type.dart';
 import '../style/calendar_style.dart';
 import '../utils/date_utils.dart';
 import 'calendar_controller.dart';
@@ -50,7 +49,8 @@ class FlipCalendar extends StatefulWidget {
     required this.dayBuilder,
     this.selectedDate,
     this.onDayTap,
-    this.onHapticFeedback,
+    this.onNavigationRestricted,
+    this.pageBack,
     this.style = const CalendarStyle(),
     this.firstDayOfWeek = DateTime.sunday,
     this.boundEdge = PageTurnEdge.top,
@@ -95,8 +95,26 @@ class FlipCalendar extends StatefulWidget {
   /// Called when an enabled day cell is tapped.
   final void Function(DateTime date)? onDayTap;
 
-  /// Called for haptic feedback events (consumer implements actual haptics).
-  final void Function(CalendarHapticType type)? onHapticFeedback;
+  /// Called once when a swipe starts toward a month outside the date bounds,
+  /// with no allowed month beyond it in that direction, so it cannot land: a
+  /// hook for feedback such as a haptic. A swipe with an allowed month in its
+  /// direction does not call it, and neither does a navigation request.
+  final VoidCallback? onNavigationRestricted;
+
+  /// The image on the back of a month's page, seen while that page turns, or
+  /// null for the plain [PageTurnStyle.backgroundColor] of the style's
+  /// [CalendarStyle.pageTurnStyle]. Called with the first day of the month
+  /// whose page turns, as each animated turn is prepared: the month turned
+  /// away from on a turn to a later month, the month turned back to on a turn
+  /// to an earlier one.
+  ///
+  /// The image is stretched over the page. A turn draws it if it has loaded
+  /// by the time the turn starts, and the plain back otherwise: Flutter's
+  /// image cache can keep it for later turns, and `precacheImage` loads it
+  /// ahead of the first. If this throws, or the image fails to load, the
+  /// error is reported to [FlutterError.onError] and the turn draws the plain
+  /// back.
+  final ImageProvider? Function(DateTime month)? pageBack;
 
   /// Style configuration for the calendar.
   final CalendarStyle style;
@@ -138,6 +156,16 @@ class _FlipCalendarState extends State<FlipCalendar>
   /// The captured page; set exactly while animating.
   ui.Image? _image;
 
+  /// Where the back of the turning page loads from ([FlipCalendar.pageBack]),
+  /// and the listener waiting for it, from the turn's preparation until the
+  /// next one or idle.
+  ImageStream? _backStream;
+  ImageStreamListener? _backListener;
+
+  /// The back of the turning page, if it loaded while the turn was being
+  /// prepared.
+  ImageInfo? _back;
+
   /// What the calendar shows now.
   _Phase _phase = _Phase.idle;
 
@@ -156,8 +184,9 @@ class _FlipCalendarState extends State<FlipCalendar>
   /// The swipe has nowhere to land.
   bool _isRestricted = false;
 
-  /// How far a restricted swipe lifts the page.
-  static const double _restrictedMaxProgress = 0.02;
+  /// The finger start the turn is drawn with: the swipe's while a swipe that
+  /// holds the page has it off flat, 0 (the free edge) for every other turn.
+  double _fingerStart = PageTurnInputs.standardFingerStart;
 
   /// The page shown at rest, and the page turned from during a flip.
   late DateTime _shownMonth;
@@ -173,8 +202,7 @@ class _FlipCalendarState extends State<FlipCalendar>
   DateTime? _targetMonth;
 
   /// The page represented by the turning image.
-  DateTime get _capturedMonth =>
-      _isForward ? _shownMonth : _targetMonth!;
+  DateTime get _capturedMonth => _isForward ? _shownMonth : _targetMonth!;
 
   /// The pages of a sequential navigation still to turn to after
   /// [_targetMonth].
@@ -300,17 +328,16 @@ class _FlipCalendarState extends State<FlipCalendar>
     _flipController.value = 0;
     _targetMonth = target;
     _phase = _Phase.capturing;
+    _loadBack(_capturedMonth);
     _paintsBeforeCapture = _paintCount;
     _requestProbePaint();
 
     final generation = _flipGeneration;
-    final prepareIncoming =
-        !_isForward && !isSameMonth(target, _shownMonth);
+    final prepareIncoming = !_isForward && !isSameMonth(target, _shownMonth);
     final scheduler = SchedulerBinding.instance;
 
     scheduler.addPostFrameCallback((_) {
-      if (_flipGeneration != generation ||
-          _phase != _Phase.capturing) {
+      if (_flipGeneration != generation || _phase != _Phase.capturing) {
         return;
       }
 
@@ -328,8 +355,7 @@ class _FlipCalendarState extends State<FlipCalendar>
       _requestProbePaint();
 
       scheduler.addPostFrameCallback((_) {
-        if (_flipGeneration == generation &&
-            _phase == _Phase.capturing) {
+        if (_flipGeneration == generation && _phase == _Phase.capturing) {
           _onCaptureFrameDrawn();
         }
       });
@@ -386,6 +412,41 @@ class _FlipCalendarState extends State<FlipCalendar>
   void _disposeImage() {
     _image?.dispose();
     _image = null;
+  }
+
+  /// Starts loading the back of [month]'s page from [FlipCalendar.pageBack],
+  /// dropping any earlier back. A back that loads while the turn is still
+  /// being prepared is drawn on the turning page; one that loads later is
+  /// left to the image cache for a later turn.
+  void _loadBack(DateTime month) {
+    _dropBack();
+    final ImageProvider? provider;
+    try {
+      provider = widget.pageBack?.call(month);
+    } catch (error, stack) {
+      _reportBackError(error, stack);
+      return;
+    }
+    if (provider == null) return;
+    final listener = ImageStreamListener((info, _) {
+      if (_phase == _Phase.capturing && _back == null) {
+        _back = info;
+      } else {
+        info.dispose();
+      }
+    }, onError: _reportBackError);
+    _backListener = listener;
+    _backStream = provider.resolve(createLocalImageConfiguration(context))
+      ..addListener(listener);
+  }
+
+  void _dropBack() {
+    final listener = _backListener;
+    if (listener != null) _backStream?.removeListener(listener);
+    _backStream = null;
+    _backListener = null;
+    _back?.dispose();
+    _back = null;
   }
 
   /// Runs the flip to 1 if [forward], otherwise to 0, along the style's curve
@@ -456,6 +517,7 @@ class _FlipCalendarState extends State<FlipCalendar>
     // Stopping notifies no listener, so this is safe inside a build.
     _flipController.stop();
     _disposeImage();
+    _dropBack();
     _phase = _Phase.idle;
     _targetMonth = null;
     _remainingPages = const [];
@@ -463,6 +525,7 @@ class _FlipCalendarState extends State<FlipCalendar>
     _dragActive = false;
     _pendingGestureResult = null;
     _isRestricted = false;
+    _fingerStart = PageTurnInputs.standardFingerStart;
   }
 
   // ---------------------------------------------------------------------------
@@ -499,16 +562,23 @@ class _FlipCalendarState extends State<FlipCalendar>
     // Last, once the swipe is registered: a request the host makes from this
     // callback is ignored, as every request is while a swipe is in progress.
     if (restricted) {
-      widget.onHapticFeedback?.call(CalendarHapticType.navigationRestricted);
+      widget.onNavigationRestricted?.call();
     }
   }
 
-  void _onDragProgress(double progress) {
+  void _onDragProgress(double turn, double fingerStart) {
     if (!_dragActive) return;
-    final turned = widget.style.dragCurve.transform(progress);
-    _flipController.value = _isRestricted
-        ? math.min(turned, _restrictedMaxProgress)
-        : turned;
+    // A flat page is drawn alike whatever its finger start, and a swipe's
+    // finger start changes only while its page lies flat: it is taken when the
+    // page leaves flat, so a grip moving over the flat page rebuilds nothing.
+    if (turn > 0 && fingerStart != _fingerStart) {
+      setState(() => _fingerStart = fingerStart);
+    }
+    final style = widget.style;
+    final limit = _isForward
+        ? style.restrictedNextTurn
+        : style.restrictedPreviousTurn;
+    _flipController.value = _isRestricted ? math.min(turn, limit) : turn;
   }
 
   void _onDragComplete(bool shouldComplete) {
@@ -644,10 +714,7 @@ class _FlipCalendarState extends State<FlipCalendar>
       child: _buildForPhase(buildPage),
     );
 
-    return _OnScreenProbe(
-      onPaint: _onProbePaint,
-      child: content,
-    );
+    return _OnScreenProbe(onPaint: _onProbePaint, child: content);
   }
 
   /// The error for the first input that is out of range,
@@ -676,10 +743,7 @@ class _FlipCalendarState extends State<FlipCalendar>
           style.flickDistanceThreshold,
           'style.flickDistanceThreshold',
         ) ??
-        _positiveFiniteError(
-          style.dragBoxSizePercentage,
-          'style.dragBoxSizePercentage',
-        );
+        _positiveFiniteError(style.dragBoxFraction, 'style.dragBoxFraction');
     if (positiveError != null) return positiveError;
     final dragProgressThreshold = style.dragProgressThreshold;
     if (!(dragProgressThreshold > 0 && dragProgressThreshold <= 1)) {
@@ -689,6 +753,21 @@ class _FlipCalendarState extends State<FlipCalendar>
         'Must be greater than 0 and at most 1',
       );
     }
+    if (!(style.nearEdgeMaxSpeedUp >= 1)) {
+      return RangeError.range(
+        style.nearEdgeMaxSpeedUp,
+        1,
+        null,
+        'style.nearEdgeMaxSpeedUp',
+      );
+    }
+    final restrictedTurnError =
+        _zeroToOneError(style.restrictedNextTurn, 'style.restrictedNextTurn') ??
+        _zeroToOneError(
+          style.restrictedPreviousTurn,
+          'style.restrictedPreviousTurn',
+        );
+    if (restrictedTurnError != null) return restrictedTurnError;
     if (!(style.flickMaxDuration > Duration.zero)) {
       return ArgumentError.value(
         style.flickMaxDuration,
@@ -715,7 +794,6 @@ class _FlipCalendarState extends State<FlipCalendar>
           style.todayBorderWidth,
           'style.todayBorderWidth',
         ) ??
-        _notNegativeFiniteError(style.dayTextSize, 'style.dayTextSize') ??
         _insetsError(style.padding, 'style.padding') ??
         _insetsError(style.todayMargin, 'style.todayMargin') ??
         _radiusError(style.borderRadius, 'style.borderRadius') ??
@@ -724,8 +802,7 @@ class _FlipCalendarState extends State<FlipCalendar>
 
   Widget _buildForPhase(Widget Function(DateTime month) buildPage) {
     final hasDistinctTarget =
-        _phase != _Phase.idle &&
-        !isSameMonth(_targetMonth!, _shownMonth);
+        _phase != _Phase.idle && !isSameMonth(_targetMonth!, _shownMonth);
 
     final months = <DateTime>[
       if (hasDistinctTarget) _targetMonth!,
@@ -733,9 +810,7 @@ class _FlipCalendarState extends State<FlipCalendar>
     ];
 
     final activeIndices = months.map(calendarMonthIndex).toSet();
-    _pageKeys.removeWhere(
-      (index, _) => !activeIndices.contains(index),
-    );
+    _pageKeys.removeWhere((index, _) => !activeIndices.contains(index));
 
     return Stack(
       fit: StackFit.expand,
@@ -754,6 +829,8 @@ class _FlipCalendarState extends State<FlipCalendar>
                 ? PageTurnDirection.forward
                 : PageTurnDirection.backward,
             edge: widget.boundEdge,
+            backImage: _back?.image,
+            fingerStart: _fingerStart,
             style: widget.style.pageTurnStyle,
           ),
       ],
@@ -766,10 +843,7 @@ class _FlipCalendarState extends State<FlipCalendar>
     required Widget Function(DateTime month) buildPage,
   }) {
     final index = calendarMonthIndex(month);
-    final boundaryKey = _pageKeys.putIfAbsent(
-      index,
-      () => GlobalKey(),
-    );
+    final boundaryKey = _pageKeys.putIfAbsent(index, () => GlobalKey());
     final isShown = isSameMonth(month, _shownMonth);
 
     final bool offstage;
@@ -781,8 +855,7 @@ class _FlipCalendarState extends State<FlipCalendar>
         // Backward: paint it below the shown page for capture.
         offstage = _isForward && !isShown;
       case _Phase.animating:
-        offstage =
-            hasDistinctTarget && isSameMonth(month, _capturedMonth);
+        offstage = hasDistinctTarget && isSameMonth(month, _capturedMonth);
     }
 
     final inactive = _phase == _Phase.animating || !isShown;
@@ -795,10 +868,7 @@ class _FlipCalendarState extends State<FlipCalendar>
           ignoring: inactive,
           child: ExcludeSemantics(
             excluding: inactive,
-            child: RepaintBoundary(
-              key: boundaryKey,
-              child: buildPage(month),
-            ),
+            child: RepaintBoundary(key: boundaryKey, child: buildPage(month)),
           ),
         ),
       ),
@@ -820,6 +890,25 @@ RangeError? _positiveFiniteError(double value, String name) {
 RangeError? _notNegativeFiniteError(double value, String name) {
   if (!(value >= 0)) return RangeError.range(value, 0, null, name);
   return _finiteError(value, name);
+}
+
+/// Reports an error from [FlipCalendar.pageBack] or the image it gives.
+void _reportBackError(Object error, StackTrace? stack) {
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stack,
+      library: 'flip_calendar',
+      context: ErrorDescription('while loading the back of a calendar page'),
+    ),
+  );
+}
+
+/// A [RangeError] naming [name] unless [value] is at least 0 and at most 1;
+/// otherwise null.
+RangeError? _zeroToOneError(double value, String name) {
+  if (value >= 0 && value <= 1) return null;
+  return RangeError.range(value, 0, 1, name);
 }
 
 /// A [RangeError] naming [name] unless [value] is finite; otherwise null.

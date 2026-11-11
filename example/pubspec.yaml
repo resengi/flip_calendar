@@ -9,7 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  page_turn_animation: ^0.1.4
   flip_calendar:
     path: ../
 
