@@ -47,7 +47,7 @@ Add the package to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flip_calendar: ^0.2.0
+  flip_calendar: ^0.3.0
 ```
 
 Then run:
